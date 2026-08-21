@@ -253,6 +253,12 @@ export default function ProfilePage() {
         <div className="h-48 animate-pulse rounded-2xl bg-ink/5" />
       )}
 
+      {profileQuery.isError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          Could not load profile settings. Please make sure you are logged in or reload the page.
+        </div>
+      )}
+
       {profile && (
         <div className="space-y-5">
           {/* Streak Performance Stats */}

@@ -18,11 +18,70 @@ import {
 import { createClient } from "@/lib/supabase/client";
 
 export async function fetchProfile(): Promise<Profile | null> {
-  const res = await fetch("/api/profile");
-  if (res.status === 401) return null;
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Failed to fetch profile");
-  return data.profile as Profile | null;
+  try {
+    const res = await fetch("/api/profile");
+    if (res.status === 401) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to fetch profile");
+    return data.profile as Profile | null;
+  } catch (err) {
+    console.error("[fetchProfile] error:", err);
+    return null;
+  }
+}
+
+export async function fetchUserStreaks(timezone: string): Promise<StreakResult> {
+  try {
+    const supabase = createClient();
+    const today = todayInTimezone(timezone);
+
+    const { data: revData, error: revErr } = await supabase
+      .from("revision_entries")
+      .select("completed_date")
+      .eq("status", "done")
+      .not("completed_date", "is", null);
+
+    if (revErr) console.warn("[fetchUserStreaks] revDone warning:", revErr.message);
+
+    const { data: revMissed, error: missedErr } = await supabase
+      .from("revision_entries")
+      .select("scheduled_date")
+      .in("status", ["missed", "pending"])
+      .lt("scheduled_date", today);
+
+    if (missedErr) console.warn("[fetchUserStreaks] revMissed warning:", missedErr.message);
+
+    const { data: probData, error: probErr } = await supabase
+      .from("problems")
+      .select("date_solved, date_added");
+
+    if (probErr) console.warn("[fetchUserStreaks] probData warning:", probErr.message);
+
+    const activeDates: string[] = [];
+    if (revData) {
+      for (const r of revData) {
+        if (r.completed_date) activeDates.push(r.completed_date);
+      }
+    }
+    if (probData) {
+      for (const p of probData) {
+        if (p.date_solved) activeDates.push(p.date_solved);
+        if (p.date_added) activeDates.push(p.date_added);
+      }
+    }
+
+    const missedDates: string[] = [];
+    if (revMissed) {
+      for (const m of revMissed) {
+        if (m.scheduled_date) missedDates.push(m.scheduled_date);
+      }
+    }
+
+    return calculateStreaks(activeDates, missedDates, today);
+  } catch (err) {
+    console.error("[fetchUserStreaks] error:", err);
+    return { currentStreak: 0, longestStreak: 0 };
+  }
 }
 
 export async function updateProfile(
@@ -333,49 +392,6 @@ export function pendingByTrack(
   return pending
     .filter((e) => e.problem_id === problemId)
     .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
-}
-
-export async function fetchUserStreaks(timezone: string): Promise<StreakResult> {
-  const supabase = createClient();
-  const today = todayInTimezone(timezone);
-
-  const { data: revData } = await supabase
-    .from("revision_entries")
-    .select("completed_date")
-    .eq("status", "done")
-    .not("completed_date", "is", null);
-
-  const { data: revMissed } = await supabase
-    .from("revision_entries")
-    .select("scheduled_date")
-    .in("status", ["missed", "pending"])
-    .lt("scheduled_date", today);
-
-  const { data: probData } = await supabase
-    .from("problems")
-    .select("date_solved, date_added");
-
-  const activeDates: string[] = [];
-  if (revData) {
-    for (const r of revData) {
-      if (r.completed_date) activeDates.push(r.completed_date);
-    }
-  }
-  if (probData) {
-    for (const p of probData) {
-      if (p.date_solved) activeDates.push(p.date_solved);
-      if (p.date_added) activeDates.push(p.date_added);
-    }
-  }
-
-  const missedDates: string[] = [];
-  if (revMissed) {
-    for (const m of revMissed) {
-      if (m.scheduled_date) missedDates.push(m.scheduled_date);
-    }
-  }
-
-  return calculateStreaks(activeDates, missedDates, today);
 }
 
 
