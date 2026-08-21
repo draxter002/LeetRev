@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LeetRevision
 
-## Getting Started
+Personal LeetCode tracker with multi-track spaced-repetition revisions. Built with Next.js, Tailwind CSS, and Supabase.
 
-First, run the development server:
+## Features
+
+- **Home** — today’s revision queue (including overdue/missed tracks, highlighted separately from high priority)
+- **Solved** — stats ring, expandable problem list, add/edit with Brute / Better / Optimal notes
+- **Profile** — timezone for day boundaries, public LeetCode username stats (GraphQL, best-effort)
+- Independent revision tracks per interval; completing late does **not** drift the cadence (`next = scheduled + interval`)
+
+## Setup
+
+### 1. Supabase
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. In **SQL Editor**, run the migration in [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql)
+3. Authentication → Providers → enable **Email** (disable “Confirm email” for solo use if you want instant signup)
+4. Copy **Project URL** and **anon public** key from Settings → API
+
+### 2. Local env
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Edit `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Run
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3000](http://localhost:3000), sign up, then add problems from **Solved**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy (Vercel)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Push the repo and import into Vercel
+2. Set the same `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` env vars
+3. Deploy
 
-## Deploy on Vercel
+In Supabase → Authentication → URL Configuration, add your Vercel URL to **Site URL** and **Redirect URLs**.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scheduling notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For intervals `[5, 12]` solved on day 0:
+
+| Track | Due sequence |
+|-------|----------------|
+| 5-day | 5, 10, 15, 20… |
+| 12-day | 12, 24, 36… |
+
+If the 5-day track is due on day 5 but completed on day 6, the next due is still day **10** (5 + 5), not day 11.
+
+Missed items stay on Home (red left border + “Missed” badge) until checked off.
+
+## Stack
+
+- Next.js (App Router) + TypeScript + Tailwind CSS v4
+- Supabase Auth + Postgres (RLS per user)
+- TanStack React Query
+- `react-syntax-highlighter` for solution display
