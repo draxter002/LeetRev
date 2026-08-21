@@ -95,9 +95,14 @@ export default function ProfilePage() {
   }, [profile]);
 
   useEffect(() => {
-    createClient()
-      .auth.getUser()
-      .then(({ data }) => setEmail(data.user?.email ?? null));
+    try {
+      createClient()
+        .auth.getUser()
+        .then(({ data }) => setEmail(data?.user?.email ?? null))
+        .catch((err) => console.warn("[getUser] effect error:", err));
+    } catch (err) {
+      console.warn("[getUser] exception:", err);
+    }
   }, []);
 
   const saveMutation = useMutation({
@@ -213,7 +218,11 @@ export default function ProfilePage() {
   }
 
   async function signOut() {
-    await createClient().auth.signOut();
+    try {
+      await createClient().auth.signOut();
+    } catch (e) {
+      console.warn("[signOut] error:", e);
+    }
     router.push("/login");
     router.refresh();
   }
