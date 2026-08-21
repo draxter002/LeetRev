@@ -70,3 +70,56 @@ export function formatNextRevision(scheduledDate: string | null, today: string):
   if (diff === 1) return "in 1 day";
   return `in ${diff} days`;
 }
+
+export type StreakResult = {
+  currentStreak: number;
+  longestStreak: number;
+};
+
+/**
+ * Calculates current and longest streaks.
+ * - Active dates (problem solved or revision completed) increment streak.
+ * - Rest days (days with 0 revisions due & 0 activity) do NOT break streak.
+ * - Missed dates (days with uncompleted due revisions & 0 activity) break streak.
+ */
+export function calculateStreaks(
+  activeDatesInput: string[],
+  missedDatesInput: string[],
+  today: string
+): StreakResult {
+  const activeSet = new Set(activeDatesInput.filter(Boolean));
+  const missedSet = new Set(missedDatesInput.filter((d) => d && d < today));
+
+  if (activeSet.size === 0) {
+    return { currentStreak: 0, longestStreak: 0 };
+  }
+
+  const allActiveSorted = Array.from(activeSet).sort();
+  const startDate = allActiveSorted[0];
+
+  let currentStreak = 0;
+  let longestStreak = 0;
+
+  let currDate = startDate;
+
+  // Walk day by day from first active date to today
+  while (currDate <= today) {
+    if (activeSet.has(currDate)) {
+      // Activity logged on this day -> increment streak
+      currentStreak += 1;
+      if (currentStreak > longestStreak) {
+        longestStreak = currentStreak;
+      }
+    } else if (missedSet.has(currDate)) {
+      // Missed due revision on this day without any activity -> break streak
+      currentStreak = 0;
+    } else {
+      // Rest day (no revisions due, no activity) -> streak is preserved
+    }
+
+    currDate = addDaysToDate(currDate, 1);
+  }
+
+  return { currentStreak, longestStreak };
+}
+

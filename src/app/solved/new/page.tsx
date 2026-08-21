@@ -18,6 +18,7 @@ export default function NewProblemPage() {
     await queryClient.invalidateQueries({ queryKey: ["problems"] });
     await queryClient.invalidateQueries({ queryKey: ["due-revisions"] });
     await queryClient.invalidateQueries({ queryKey: ["pending-revisions"] });
+    await queryClient.invalidateQueries({ queryKey: ["user-streaks"] });
     router.push("/solved");
   }
 

@@ -24,8 +24,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const deleteImported = !!body.deleteImported;
 
-    // clear username from profile
-    await serverSupabase.from("profiles").update({ leetcode_username: null }).eq("id", user.id);
+    // clear username and saved session cookie from profile
+    await serverSupabase
+      .from("profiles")
+      .update({ leetcode_username: null, leetcode_session: null })
+      .eq("id", user.id);
 
     if (deleteImported) {
       // delete imported problems for user; remove revision_entries first

@@ -7,49 +7,35 @@ import type {
   Solutions,
 } from "@/lib/types";
 import {
+  calculateStreaks,
   formatNextRevision,
   isOverdue,
   nextRevisionAfterComplete,
   seedRevisionsFromSolved,
+  StreakResult,
   todayInTimezone,
 } from "@/lib/scheduling";
 import { createClient } from "@/lib/supabase/client";
 
 export async function fetchProfile(): Promise<Profile | null> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  if (error) throw error;
-  return data as Profile;
+  const res = await fetch("/api/profile");
+  if (res.status === 401) return null;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to fetch profile");
+  return data.profile as Profile | null;
 }
 
 export async function updateProfile(
-  updates: Partial<Pick<Profile, "display_name" | "timezone" | "leetcode_username" | "default_revision_intervals">>
+  updates: Partial<Pick<Profile, "display_name" | "timezone" | "leetcode_username" | "default_revision_intervals" | "email_reminders_enabled">>
 ): Promise<Profile> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", user.id)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as Profile;
+  const res = await fetch("/api/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to save profile settings");
+  return data.profile as Profile;
 }
 
 export async function fetchProblems(): Promise<Problem[]> {
@@ -91,6 +77,22 @@ export async function fetchPendingRevisionsForProblems(
   return (data ?? []) as RevisionEntry[];
 }
 
+export async function fetchCompletedRevisionsForProblems(
+  problemIds: string[]
+): Promise<{ id: string; problem_id: string; completed_date: string | null; interval_label: string }[]> {
+  if (problemIds.length === 0) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("revision_entries")
+    .select("id, problem_id, completed_date, interval_label")
+    .in("problem_id", problemIds)
+    .eq("status", "done")
+    .order("completed_date", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as { id: string; problem_id: string; completed_date: string | null; interval_label: string }[];
+}
+
 export async function fetchDueRevisions(
   timezone: string
 ): Promise<RevisionEntryWithProblem[]> {
@@ -99,14 +101,17 @@ export async function fetchDueRevisions(
 
   const { data, error } = await supabase
     .from("revision_entries")
-    .select("*, problems (id, title, topic, priority, problem_link)")
+    .select("*, problems (id, title, topic, priority, problem_link, revision_disabled)")
     .in("status", ["pending", "missed"])
     .lte("scheduled_date", today)
     .order("scheduled_date", { ascending: true });
 
   if (error) throw error;
 
-  const rows = (data ?? []) as RevisionEntryWithProblem[];
+  const rawRows = (data ?? []) as (RevisionEntryWithProblem & { problems?: { revision_disabled?: boolean } })[];
+
+  // Filter out any entries for problems where revision_disabled is true
+  const rows = rawRows.filter((r) => r.problems?.revision_disabled !== true);
 
   // Mark overdue as missed (best-effort; display still works if this fails)
   const overdueIds = rows
@@ -185,6 +190,7 @@ export async function createProblem(values: ProblemFormValues): Promise<Problem>
 
   const intervals = values.revision_intervals.filter((n) => n > 0);
   const dateSolved = values.date_solved || todayInTimezone("UTC");
+  const isDisabled = values.revision_disabled ?? false;
 
   const { data: problem, error } = await supabase
     .from("problems")
@@ -198,22 +204,25 @@ export async function createProblem(values: ProblemFormValues): Promise<Problem>
       date_solved: dateSolved,
       revision_intervals: intervals,
       solutions: normalizeSolutions(values.solutions),
+      revision_disabled: isDisabled,
     })
     .select()
     .single();
 
   if (error) throw error;
 
-  const seeds = seedRevisionsFromSolved(dateSolved, intervals);
-  if (seeds.length > 0) {
-    const { error: revError } = await supabase.from("revision_entries").insert(
-      seeds.map((s) => ({
-        user_id: user.id,
-        problem_id: problem.id,
-        ...s,
-      }))
-    );
-    if (revError) throw revError;
+  if (!isDisabled) {
+    const seeds = seedRevisionsFromSolved(dateSolved, intervals);
+    if (seeds.length > 0) {
+      const { error: revError } = await supabase.from("revision_entries").insert(
+        seeds.map((s) => ({
+          user_id: user.id,
+          problem_id: problem.id,
+          ...s,
+        }))
+      );
+      if (revError) throw revError;
+    }
   }
 
   return problem as Problem;
@@ -231,7 +240,8 @@ export async function updateProblem(
   if (!user) throw new Error("Not authenticated");
 
   const intervals = values.revision_intervals.filter((n) => n > 0);
-  const dateSolved = values.date_solved || null;
+  const dateSolved = values.date_solved || todayInTimezone("UTC");
+  const isDisabled = values.revision_disabled ?? false;
 
   const { data: problem, error } = await supabase
     .from("problems")
@@ -243,6 +253,7 @@ export async function updateProblem(
       date_solved: dateSolved,
       revision_intervals: intervals,
       solutions: normalizeSolutions(values.solutions),
+      revision_disabled: isDisabled,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
@@ -251,14 +262,15 @@ export async function updateProblem(
 
   if (error) throw error;
 
-  if (options?.reseedSchedule && dateSolved) {
-    // Remove open pending/missed entries and reseed from solved date
-    await supabase
-      .from("revision_entries")
-      .delete()
-      .eq("problem_id", id)
-      .in("status", ["pending", "missed"]);
+  // Always delete open pending/missed entries when schedule or revision_disabled changes
+  await supabase
+    .from("revision_entries")
+    .delete()
+    .eq("problem_id", id)
+    .in("status", ["pending", "missed"]);
 
+  // If revision is NOT disabled, seed fresh pending entries
+  if (!isDisabled && intervals.length > 0) {
     const seeds = seedRevisionsFromSolved(dateSolved, intervals);
     if (seeds.length > 0) {
       const { error: revError } = await supabase.from("revision_entries").insert(
@@ -322,3 +334,48 @@ export function pendingByTrack(
     .filter((e) => e.problem_id === problemId)
     .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
 }
+
+export async function fetchUserStreaks(timezone: string): Promise<StreakResult> {
+  const supabase = createClient();
+  const today = todayInTimezone(timezone);
+
+  const { data: revData } = await supabase
+    .from("revision_entries")
+    .select("completed_date")
+    .eq("status", "done")
+    .not("completed_date", "is", null);
+
+  const { data: revMissed } = await supabase
+    .from("revision_entries")
+    .select("scheduled_date")
+    .in("status", ["missed", "pending"])
+    .lt("scheduled_date", today);
+
+  const { data: probData } = await supabase
+    .from("problems")
+    .select("date_solved, date_added");
+
+  const activeDates: string[] = [];
+  if (revData) {
+    for (const r of revData) {
+      if (r.completed_date) activeDates.push(r.completed_date);
+    }
+  }
+  if (probData) {
+    for (const p of probData) {
+      if (p.date_solved) activeDates.push(p.date_solved);
+      if (p.date_added) activeDates.push(p.date_added);
+    }
+  }
+
+  const missedDates: string[] = [];
+  if (revMissed) {
+    for (const m of revMissed) {
+      if (m.scheduled_date) missedDates.push(m.scheduled_date);
+    }
+  }
+
+  return calculateStreaks(activeDates, missedDates, today);
+}
+
+

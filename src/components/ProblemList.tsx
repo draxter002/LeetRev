@@ -11,10 +11,12 @@ import { isOverdue, todayInTimezone } from "@/lib/scheduling";
 export function ProblemList({
   problems,
   pending,
+  completed = [],
   timezone,
 }: {
   problems: ProblemWithNextRevision[];
   pending: RevisionEntry[];
+  completed?: { id: string; problem_id: string; completed_date: string | null; interval_label: string }[];
   timezone: string;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -53,6 +55,11 @@ export function ProblemList({
           const tracks = pending
             .filter((e) => e.problem_id === problem.id)
             .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+          const doneTracks = completed
+            .filter((e) => e.problem_id === problem.id)
+            .sort((a, b) => (b.completed_date || "").localeCompare(a.completed_date || ""));
+          const timesRevised = doneTracks.length;
+
           const overdueNext =
             problem.next_revision_date != null &&
             isOverdue(problem.next_revision_date, today);
@@ -72,10 +79,18 @@ export function ProblemList({
                 </div>
                 <span
                   className={`text-sm ${
-                    overdueNext ? "font-medium text-missed" : "text-ink/60"
+                    problem.revision_disabled
+                      ? "text-ink/40 font-normal italic"
+                      : overdueNext
+                      ? "font-medium text-missed"
+                      : "text-ink/60"
                   }`}
                 >
-                  {problem.next_revision_label}
+                  {problem.revision_disabled
+                    ? "Revision turned off"
+                    : problem.next_revision_label === "No schedule"
+                    ? "Not scheduled"
+                    : problem.next_revision_label}
                 </span>
                 <span className="hidden md:inline-flex">
                   <PriorityBadge priority={problem.priority} />
@@ -89,6 +104,15 @@ export function ProblemList({
                     <span className="rounded-md bg-ink/5 px-2 py-0.5 text-xs text-ink/65">
                       {problem.topic}
                     </span>
+                    {problem.revision_disabled ? (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                        ⏸️ Revision Turned Off
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-teal/20 bg-teal/5 px-2 py-0.5 text-xs font-semibold text-teal">
+                        🔁 {timesRevised === 0 ? "Revised 0 times" : `Revised ${timesRevised} time${timesRevised === 1 ? "" : "s"}`}
+                      </span>
+                    )}
                     {problem.problem_link && (
                       <a
                         href={problem.problem_link}
@@ -107,32 +131,62 @@ export function ProblemList({
                     </Link>
                   </div>
 
-                  <div className="mb-4">
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/45">
-                      Revision tracks
-                    </h4>
-                    {tracks.length === 0 ? (
-                      <p className="text-sm text-ink/45">No upcoming revisions.</p>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {tracks.map((t) => (
-                          <li
-                            key={t.id}
-                            className="flex flex-wrap items-center gap-2 text-sm text-ink/70"
-                          >
-                            <span className="rounded bg-teal/10 px-1.5 py-0.5 text-xs font-medium text-teal">
-                              {t.interval_label}
-                            </span>
-                            <span>next due {t.scheduled_date}</span>
-                            {(isOverdue(t.scheduled_date, today) || t.status === "missed") && (
-                              <span className="rounded bg-missed/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-missed">
-                                Missed
+                  <div className="mb-4 grid gap-4 sm:grid-cols-2">
+                    {/* Active Upcoming Tracks */}
+                    <div>
+                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/45">
+                        Upcoming Revision Tracks
+                      </h4>
+                      {tracks.length === 0 ? (
+                        <p className="text-sm text-ink/45">No upcoming revisions.</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {tracks.map((t) => (
+                            <li
+                              key={t.id}
+                              className="flex flex-wrap items-center gap-2 text-sm text-ink/70"
+                            >
+                              <span className="rounded bg-teal/10 px-1.5 py-0.5 text-xs font-medium text-teal">
+                                {t.interval_label}
                               </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                              <span>next due {t.scheduled_date}</span>
+                              {(isOverdue(t.scheduled_date, today) || t.status === "missed") && (
+                                <span className="rounded bg-missed/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-missed">
+                                  Missed
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {/* Completed Revision History */}
+                    <div>
+                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/45">
+                        Revision History ({timesRevised})
+                      </h4>
+                      {doneTracks.length === 0 ? (
+                        <p className="text-sm text-ink/45">No revisions completed yet.</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {doneTracks.map((d) => (
+                            <li
+                              key={d.id}
+                              className="flex items-center gap-2 text-xs text-ink/75"
+                            >
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
+                                ✓
+                              </span>
+                              <span className="font-semibold text-ink">{d.interval_label}</span>
+                              <span className="text-ink/45">
+                                {d.completed_date ? `completed on ${d.completed_date}` : "completed"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
 
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/45">

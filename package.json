@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:scheduling": "npx tsx src/lib/scheduling.test.ts"
+    "test:scheduling": "npx --yes tsx src/lib/scheduling.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

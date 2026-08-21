@@ -7,6 +7,7 @@ const links = [
   { href: "/", label: "Home", icon: HomeIcon },
   { href: "/solved", label: "Solved", icon: SolvedIcon },
   { href: "/profile", label: "Profile", icon: ProfileIcon },
+  { href: "/feedback", label: "Feedback", icon: FeedbackIcon },
 ];
 
 function HomeIcon({ className }: { className?: string }) {
@@ -30,6 +31,14 @@ function ProfileIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 19.5c1.5-3.2 4-4.5 7-4.5s5.5 1.3 7 4.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FeedbackIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

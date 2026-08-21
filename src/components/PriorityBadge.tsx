@@ -1,39 +1,51 @@
+"use client";
+
 import type { Priority } from "@/lib/types";
 
-const styles: Record<Priority, string> = {
+const DOT_CLASSES: Record<Priority, string> = {
   low: "bg-priority-low",
   medium: "bg-priority-med",
   high: "bg-priority-high",
 };
 
-const labels: Record<Priority, string> = {
+const BADGE_CLASSES: Record<Priority, string> = {
+  low: "text-priority-low bg-priority-low/10",
+  medium: "text-priority-med bg-priority-med/10",
+  high: "text-priority-high bg-priority-high/10",
+};
+
+const BADGE_LABELS: Record<Priority, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
 };
 
-export function PriorityDot({ priority }: { priority: Priority }) {
+export function PriorityDot({ priority }: { priority: Priority | null }) {
+  if (!priority) {
+    // Neutral grey dot for unset priority (LeetCode-imported problems)
+    return <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-ink/20" title="Priority not set" />;
+  }
   return (
     <span
-      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${styles[priority]}`}
-      title={labels[priority]}
-      aria-label={`${labels[priority]} priority`}
+      className={`mt-1 h-2 w-2 shrink-0 rounded-full ${DOT_CLASSES[priority]}`}
+      title={BADGE_LABELS[priority]}
     />
   );
 }
 
-export function PriorityBadge({ priority }: { priority: Priority }) {
-  const text: Record<Priority, string> = {
-    low: "text-emerald-800 bg-emerald-100",
-    medium: "text-amber-800 bg-amber-100",
-    high: "text-rose-800 bg-rose-100",
-  };
+export function PriorityBadge({ priority }: { priority: Priority | null }) {
+  if (!priority) {
+    return (
+      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-ink/35 bg-ink/5">
+        —
+      </span>
+    );
+  }
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium ${text[priority]}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${BADGE_CLASSES[priority]}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${styles[priority]}`} />
-      {labels[priority]}
+      {BADGE_LABELS[priority]}
     </span>
   );
 }

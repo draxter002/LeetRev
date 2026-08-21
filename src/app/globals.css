@@ -65,3 +65,8 @@ body {
 .animate-expand {
   animation: expand 0.22s ease-out;
 }
+
+/* Hide Next.js dev indicator badge */
+nextjs-portal {
+  display: none !important;
+}

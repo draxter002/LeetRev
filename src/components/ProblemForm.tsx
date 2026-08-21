@@ -19,6 +19,7 @@ type Props = {
   submitLabel?: string;
   onSubmit: (values: ProblemFormSubmit) => Promise<void>;
   onCancel?: () => void;
+  onDelete?: () => void | Promise<void>;
   showReseed?: boolean;
   reseedDefault?: boolean;
 };
@@ -29,17 +30,18 @@ export function ProblemForm({
   submitLabel = "Save problem",
   onSubmit,
   onCancel,
+  onDelete,
   showReseed = false,
   reseedDefault = false,
 }: Props) {
   const defaultSolved = todayInTimezone(timezone);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [topic, setTopic] = useState(initial?.topic ?? TOPICS[0]);
-  const [priority, setPriority] = useState<Priority>(initial?.priority ?? "medium");
+  const [priority, setPriority] = useState<Priority>(initial?.priority || "medium");
   const [problemLink, setProblemLink] = useState(initial?.problem_link ?? "");
   const [dateSolved, setDateSolved] = useState(initial?.date_solved ?? defaultSolved);
   const [intervals, setIntervals] = useState<number[]>(
-    initial?.revision_intervals?.length ? initial.revision_intervals : [5]
+    initial?.revision_intervals !== undefined ? initial.revision_intervals : [5]
   );
   const [solutions, setSolutions] = useState<Solutions>({
     brute: { ...emptySolutions.brute, ...initial?.solutions?.brute },
@@ -49,13 +51,18 @@ export function ProblemForm({
   const [openSection, setOpenSection] = useState<"brute" | "better" | "optimal" | null>(
     "optimal"
   );
+  const [revisionDisabled, setRevisionDisabled] = useState<boolean>(
+    initial?.revision_disabled ?? false
+  );
   const [reseed, setReseed] = useState(reseedDefault);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const canSave = useMemo(
-    () => title.trim().length > 0 && intervals.some((n) => n > 0),
-    [title, intervals]
+    () => title.trim().length > 0,
+    [title]
   );
 
   function updateSolution(
@@ -83,6 +90,7 @@ export function ProblemForm({
         date_solved: dateSolved,
         revision_intervals: intervals.filter((n) => n > 0),
         solutions,
+        revision_disabled: revisionDisabled,
         reseedSchedule: showReseed ? reseed : undefined,
       });
     } catch (err) {
@@ -171,46 +179,72 @@ export function ProblemForm({
         />
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <label className="text-sm font-medium text-ink">Revision intervals (days)</label>
-          <button
-            type="button"
-            onClick={() => setIntervals((prev) => [...prev, 12])}
-            className="rounded-md bg-teal/10 px-2 py-1 text-xs font-semibold text-teal hover:bg-teal/15"
-          >
-            + Add
-          </button>
-        </div>
-        <div className="space-y-2">
-          {intervals.map((val, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                value={val}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  setIntervals((prev) =>
-                    prev.map((v, i) => (i === idx ? (Number.isFinite(n) ? n : 0) : v))
-                  );
-                }}
-                className="w-28 rounded-lg border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
-              />
-              <span className="text-sm text-ink/50">day track</span>
-              {intervals.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setIntervals((prev) => prev.filter((_, i) => i !== idx))}
-                  className="ml-auto text-xs font-medium text-ink/45 hover:text-rose-600"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+      {/* Turn off revision option */}
+      <div className="rounded-xl border border-rose-200/80 bg-rose-50/40 p-3.5 shadow-2xs">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={revisionDisabled}
+            onChange={(e) => setRevisionDisabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-ink/30 text-rose-600 focus:ring-rose-500"
+          />
+          <div>
+            <span className="text-sm font-semibold text-ink">
+              Turn off revision for this problem
+            </span>
+            <p className="mt-0.5 text-xs text-ink/55">
+              When enabled, revision is paused for this problem. It will no longer appear in your daily revision queue, and the revision stats/graphs will adjust accordingly.
+            </p>
+          </div>
+        </label>
       </div>
+
+      {!revisionDisabled && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="text-sm font-medium text-ink">Revision intervals (days)</label>
+            <button
+              type="button"
+              onClick={() => setIntervals((prev) => [...prev, 12])}
+              className="rounded-md bg-teal/10 px-2 py-1 text-xs font-semibold text-teal hover:bg-teal/15"
+            >
+              + Add
+            </button>
+          </div>
+          {intervals.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-ink/15 px-3 py-3 text-sm text-ink/45">
+              No revision intervals set — click <strong>+ Add</strong> to schedule this problem.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {intervals.map((val, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={val}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      setIntervals((prev) =>
+                        prev.map((v, i) => (i === idx ? (Number.isFinite(n) ? n : 0) : v))
+                      );
+                    }}
+                    className="w-28 rounded-lg border border-ink/15 bg-white px-3 py-2 text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
+                  />
+                  <span className="text-sm text-ink/50">day track</span>
+                  <button
+                    type="button"
+                    onClick={() => setIntervals((prev) => prev.filter((_, i) => i !== idx))}
+                    className="ml-auto text-xs font-medium text-ink/45 hover:text-rose-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <p className="mb-2 text-sm font-medium text-ink">Solutions (optional)</p>
@@ -277,10 +311,10 @@ export function ProblemForm({
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
-      <div className="flex flex-wrap gap-3 pt-1">
+      <div className="flex flex-wrap items-center gap-3 pt-1">
         <button
           type="submit"
-          disabled={!canSave || saving}
+          disabled={!canSave || saving || deleting}
           className="rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-dark disabled:opacity-50"
         >
           {saving ? "Saving…" : submitLabel}
@@ -289,10 +323,52 @@ export function ProblemForm({
           <button
             type="button"
             onClick={onCancel}
+            disabled={saving || deleting}
             className="rounded-lg border border-ink/15 px-4 py-2.5 text-sm font-medium text-ink/70 hover:bg-ink/5"
           >
             Cancel
           </button>
+        )}
+        {onDelete && (
+          <div className="flex items-center gap-2">
+            {!confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                disabled={saving || deleting}
+                className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition disabled:opacity-50"
+              >
+                Delete problem
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-1">
+                <span className="px-2 text-xs font-semibold text-rose-700">Delete this problem?</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      await onDelete();
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  disabled={deleting}
+                  className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Yes, delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="rounded-md border border-ink/15 bg-white px-2.5 py-1.5 text-xs font-medium text-ink/60 hover:bg-ink/5"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </form>

@@ -24,6 +24,7 @@ export function RevisionRow({
       queryClient.invalidateQueries({ queryKey: ["due-revisions"] });
       queryClient.invalidateQueries({ queryKey: ["problems"] });
       queryClient.invalidateQueries({ queryKey: ["pending-revisions"] });
+      queryClient.invalidateQueries({ queryKey: ["user-streaks"] });
     },
   });
 

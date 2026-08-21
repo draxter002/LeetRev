@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
@@ -35,7 +36,6 @@ export default function EditProblemPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this problem and all its revision entries?")) return;
     await deleteProblem(id);
     await queryClient.invalidateQueries({ queryKey: ["problems"] });
     await queryClient.invalidateQueries({ queryKey: ["due-revisions"] });
@@ -44,20 +44,9 @@ export default function EditProblemPage() {
 
   return (
     <AppShell>
-      <div className="mb-6 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl text-ink">Edit problem</h1>
-          <p className="mt-1 text-sm text-ink/55">Update details or reseed revision tracks.</p>
-        </div>
-        {problem && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="text-sm font-medium text-rose-600 hover:underline"
-          >
-            Delete
-          </button>
-        )}
+      <div className="mb-6">
+        <h1 className="font-display text-3xl text-ink">Edit problem</h1>
+        <p className="mt-1 text-sm text-ink/55">Update details or reseed revision tracks.</p>
       </div>
 
       {problemQuery.isLoading && (
@@ -89,6 +78,7 @@ export default function EditProblemPage() {
             }}
             onSubmit={handleSubmit}
             onCancel={() => router.push("/solved")}
+            onDelete={handleDelete}
           />
         </div>
       )}

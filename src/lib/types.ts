@@ -20,6 +20,10 @@ export type Profile = {
   display_name: string | null;
   timezone: string;
   leetcode_username: string | null;
+  leetcode_session?: string | null;
+  leetcode_imported?: boolean;
+  leetcode_imported_at?: string | null;
+  email_reminders_enabled?: boolean;
   // default intervals to use when seeding/importing problems
   default_revision_intervals?: number[];
   created_at: string;
@@ -31,12 +35,15 @@ export type Problem = {
   user_id: string;
   title: string;
   topic: Topic | string;
-  priority: Priority;
+  priority: Priority | null;
   problem_link: string | null;
   date_added: string;
   date_solved: string | null;
   revision_intervals: number[];
   solutions: Solutions;
+  source: "manual" | "leetcode_import" | null;
+  leetcode_slug: string | null;
+  revision_disabled?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -60,9 +67,10 @@ export type RevisionEntryWithProblem = RevisionEntry & {
 export type ProblemFormValues = {
   title: string;
   topic: string;
-  priority: Priority;
+  priority: Priority | null;
   problem_link: string;
   date_solved: string;
   revision_intervals: number[];
   solutions: Solutions;
+  revision_disabled?: boolean;
 };

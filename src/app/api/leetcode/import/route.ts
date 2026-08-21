@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { RECENT_QUERY } from "../route";
 import { seedRevisionsFromSolved } from "@/lib/scheduling";
 
 export async function POST(request: NextRequest) {
@@ -14,9 +13,7 @@ export async function POST(request: NextRequest) {
           getAll() {
             return request.cookies.getAll();
           },
-          setAll() {
-            // not needed
-          },
+          setAll() {},
         },
       }
     );
@@ -27,95 +24,250 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
-    const username = (body.username || undefined) as string | undefined;
+    const sessionCookie = (body.sessionCookie || "").trim();
 
-    let leetUsername = username;
-    if (!leetUsername) {
-      const { data: profile } = await serverSupabase.from("profiles").select("leetcode_username").eq("id", user.id).maybeSingle();
-      leetUsername = profile?.leetcode_username ?? undefined;
+    const admin = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // Fetch saved session cookie and default intervals from profile
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("leetcode_session, default_revision_intervals")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    // Use cookie passed in request body, or fall back to saved profile cookie
+    const effectiveCookie = (sessionCookie || profile?.leetcode_session || "").trim();
+
+    if (!effectiveCookie) {
+      return NextResponse.json(
+        {
+          error:
+            "No LEETCODE_SESSION cookie found. Please provide your LeetCode session cookie in Profile settings to sync solved problems.",
+        },
+        { status: 400 }
+      );
     }
-    if (!leetUsername) {
-      console.warn("[import] No LeetCode username found for user", user.id);
-      return NextResponse.json({ error: "LeetCode username not set" }, { status: 400 });
+
+    const defaultIntervals =
+      profile?.default_revision_intervals && profile.default_revision_intervals.length > 0
+        ? profile.default_revision_intervals
+        : [5];
+
+    // Build the cookie header
+    const cookieHeader = effectiveCookie.includes("LEETCODE_SESSION=")
+      ? effectiveCookie
+      : `LEETCODE_SESSION=${effectiveCookie}`;
+
+    // ── Fetch all solved problems using LEETCODE_SESSION cookie (REST only) ──
+    console.log("[import] Fetching solved problems via LEETCODE_SESSION cookie...");
+
+    let problemsToImport: { title: string; titleSlug?: string }[] = [];
+    let isCookieInvalid = false;
+    let authStatusCode: number | null = null;
+
+    try {
+      const res = await fetch("https://leetcode.com/api/problems/all/", {
+        headers: {
+          Cookie: cookieHeader,
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Referer: "https://leetcode.com/progress/",
+        },
+      });
+
+      authStatusCode = res.status;
+
+      if (!res.ok) {
+        console.warn("[import] LeetCode REST returned status:", res.status);
+        if (res.status === 401 || res.status === 403) {
+          isCookieInvalid = true;
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const pairs: any[] = data?.stat_status_pairs || [];
+
+        if (pairs.length === 0) {
+          // Empty stat_status_pairs usually means the cookie is invalid or not authenticated
+          isCookieInvalid = true;
+        } else {
+          const solvedPairs = pairs.filter((p: any) => p.status === "ac");
+          console.log("[import] Found", solvedPairs.length, "accepted solved problems.");
+          problemsToImport = solvedPairs.map((p: any) => ({
+            title: p.stat.question__title,
+            titleSlug: p.stat.question__title_slug,
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("[import] Cookie REST fetch error:", err);
     }
 
-    console.log("[import] Starting import for", leetUsername);
-    const res = await fetch("https://leetcode.com/graphql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Referer: "https://leetcode.com" },
-      body: JSON.stringify({ query: RECENT_QUERY, variables: { username: leetUsername, limit: 200 } }),
-    });
-    if (!res.ok) {
-      console.error("[import] LeetCode API failed:", res.status);
-      return NextResponse.json({ error: `LeetCode returned ${res.status}` }, { status: 502 });
+    // If cookie is invalid or returned an auth error
+    if (isCookieInvalid || (problemsToImport.length === 0 && authStatusCode && authStatusCode >= 400)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid or expired LEETCODE_SESSION cookie. Please copy a fresh cookie from your browser's Developer Tools (F12 → Application → Cookies) and update it in your profile.",
+        },
+        { status: 401 }
+      );
     }
 
-    const json = await res.json().catch(() => ({}));
-    const list = json?.data?.recentAcSubmissionList ?? [];
-    console.log("[import] Fetched", list.length, "recent problems");
-    const recent: { title: string; titleSlug?: string }[] = list.map((x: any) => ({ title: x.title, titleSlug: x.titleSlug }));
+    if (problemsToImport.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        added: 0,
+        totalFound: 0,
+        message: "No accepted solved problems found on this LeetCode account.",
+      });
+    }
 
-    // use admin client to upsert safely
-    const admin = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+    // If a new session cookie was passed and successfully used, save it to profile
+    if (sessionCookie) {
+      await admin
+        .from("profiles")
+        .update({ leetcode_session: sessionCookie })
+        .eq("id", user.id);
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     let added = 0;
+    let lastError: string | null = null;
 
-    for (const item of recent) {
+    // ── Batch deduplication: fetch all existing slugs + titles in one query ──
+    const allSlugs = problemsToImport.map((p) => p.titleSlug).filter(Boolean) as string[];
+    const allTitles = problemsToImport.map((p) => p.title);
+
+    const { data: existingRows } = await admin
+      .from("problems")
+      .select("id, title, leetcode_slug, revision_intervals, priority")
+      .eq("user_id", user.id)
+      .or(
+        [
+          allSlugs.length > 0 ? `leetcode_slug.in.(${allSlugs.map((s) => `"${s}"`).join(",")})` : null,
+          `title.in.(${allTitles.map((t) => `"${t.replace(/"/g, '""')}"`).join(",")})`,
+        ]
+          .filter(Boolean)
+          .join(",")
+      );
+
+    const existingBySlug = new Map<string, { id: string; revision_intervals: number[] | null; priority: string | null }>();
+    const existingByTitle = new Map<string, { id: string; revision_intervals: number[] | null; priority: string | null }>();
+    for (const row of existingRows ?? []) {
+      if (row.leetcode_slug) existingBySlug.set(row.leetcode_slug, row);
+      existingByTitle.set(row.title, row);
+    }
+
+    // Backfill priority / intervals for already-existing problems that are missing them
+    const needsBackfill = (existingRows ?? []).filter(
+      (r) => !r.priority || !r.revision_intervals?.length
+    );
+    if (needsBackfill.length > 0) {
+      for (const r of needsBackfill) {
+        const updates: Record<string, unknown> = {};
+        if (!r.priority) updates.priority = "medium";
+        if (!r.revision_intervals?.length) {
+          updates.revision_intervals = defaultIntervals;
+          const seeds = seedRevisionsFromSolved(today, defaultIntervals);
+          if (seeds.length > 0) {
+            await admin.from("revision_entries").insert(
+              seeds.map((s) => ({ user_id: user.id, problem_id: r.id, ...s }))
+            );
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          await admin.from("problems").update(updates).eq("id", r.id);
+        }
+      }
+    }
+
+    // Build list of genuinely new problems to insert
+    const newProblems: any[] = [];
+    for (const item of problemsToImport) {
       const slug = item.titleSlug ?? null;
-      const link = slug ? `https://leetcode.com/problems/${slug}` : null;
+      const existing = (slug && existingBySlug.get(slug)) || existingByTitle.get(item.title);
+      if (existing) continue; // already in DB
 
-      // build insert object; leave priority and revision_intervals null (do not set)
-      const insertObj: any = {
+      newProblems.push({
         user_id: user.id,
         title: item.title,
         topic: "LeetCode Fetched",
-        problem_link: link,
+        priority: "medium",
+        revision_intervals: defaultIntervals,
+        problem_link: slug ? `https://leetcode.com/problems/${slug}` : null,
         leetcode_slug: slug,
         source: "leetcode_import",
         date_added: today,
         date_solved: today,
         solutions: {},
-      };
+      });
+    }
 
-      if (slug) {
-        // upsert by user_id + leetcode_slug using onConflict (requires unique index)
-        const { data: upserted, error: upsertErr } = await admin
-          .from("problems")
-          .upsert(insertObj, { onConflict: "user_id,leetcode_slug" })
-          .select()
-          .maybeSingle();
-        if (upsertErr) {
-          console.warn("[import] Upsert failed for", slug, ":", upsertErr);
-          continue;
-        }
-        // Supabase upsert always returns the row (newly created or updated)
-        // Count it if it was inserted (check if created_at is very recent, or assume all are new on first import)
-        if (upserted) {
-          added++;
-        }
-      } else {
-        // no slug – insert only if no problem with same title exists for user
-        const { data: existing } = await admin.from("problems").select("id").eq("user_id", user.id).eq("title", item.title).limit(1).maybeSingle();
-        if (existing && existing.id) continue;
-        const { data: inserted, error: insErr } = await admin.from("problems").insert(insertObj).select().maybeSingle();
-        if (insErr) {
-          console.warn("[import] Insert failed", insErr);
-          continue;
-        }
-        if (inserted) added++;
+    // Batch insert new problems in chunks of 50
+    const CHUNK = 50;
+    const insertedIds: string[] = [];
+    for (let i = 0; i < newProblems.length; i += CHUNK) {
+      const chunk = newProblems.slice(i, i + CHUNK);
+      const { data: inserted, error: insErr } = await admin
+        .from("problems")
+        .insert(chunk)
+        .select("id");
+      if (insErr) {
+        lastError = insErr.message;
+        console.error("[import] Batch insert error:", insErr.message);
+      } else if (inserted) {
+        for (const row of inserted) insertedIds.push(row.id);
+      }
+    }
+    added = insertedIds.length;
+
+    // Batch insert revision seeds for all newly inserted problems
+    if (insertedIds.length > 0 && defaultIntervals.length > 0) {
+      const seeds = seedRevisionsFromSolved(today, defaultIntervals);
+      const revisionRows = insertedIds.flatMap((pid) =>
+        seeds.map((s) => ({ user_id: user.id, problem_id: pid, ...s }))
+      );
+      for (let i = 0; i < revisionRows.length; i += CHUNK) {
+        await admin.from("revision_entries").insert(revisionRows.slice(i, i + CHUNK));
       }
     }
 
-    // mark profile as imported if any were added
-    if (added > 0) {
-      await admin.from("profiles").update({ leetcode_imported: true, leetcode_imported_at: new Date().toISOString() }).eq("id", user.id);
+    // Backfill any remaining problems that have null priority
+    await admin
+      .from("problems")
+      .update({ priority: "medium" })
+      .eq("user_id", user.id)
+      .is("priority", null);
+
+    // Update last-synced timestamp on profile
+    await admin
+      .from("profiles")
+      .update({
+        leetcode_imported: true,
+        leetcode_imported_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+
+    console.log("[import] Completed: added", added, "new problems.");
+
+    if (added === 0 && lastError) {
+      return NextResponse.json({ error: `Database insert failed: ${lastError}` }, { status: 500 });
     }
 
-    console.log("[import] Successfully added", added, "problems");
-    return NextResponse.json({ ok: true, added });
+    return NextResponse.json({
+      ok: true,
+      added,
+      totalFound: problemsToImport.length,
+    });
   } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    console.error("[import] Fatal error:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
