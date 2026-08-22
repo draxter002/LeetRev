@@ -268,6 +268,19 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {!profileQuery.isLoading && !profileQuery.isError && !profile && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Session not found. Please{" "}
+          <button
+            onClick={() => router.push("/login")}
+            className="font-semibold underline hover:text-amber-900"
+          >
+            log in again
+          </button>{" "}
+          to view your profile.
+        </div>
+      )}
+
       {profile && (
         <div className="space-y-5">
           {/* Streak Performance Stats */}
