@@ -45,8 +45,29 @@ export default function LoginPage() {
           },
         });
         if (signUpError) throw signUpError;
-        setMessage("Account created. You can sign in now (confirm email if required by your project).");
+
+        // Immediately sign in and save the chosen default interval to profile
+        const { error: signInAfterSignupError } = await supabase.auth.signInWithPassword({ email, password });
+        if (!signInAfterSignupError) {
+          // Profile is created on first /api/profile GET, which picks up metadata.
+          // But also explicitly PATCH now so the interval is definitely saved.
+          try {
+            await fetch("/api/profile", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ default_revision_intervals: [defaultInterval ?? 5] }),
+            });
+          } catch (_) {
+            // Non-fatal: profile GET will backfill from metadata if PATCH fails
+          }
+          router.push("/");
+          router.refresh();
+          return;
+        }
+
+        setMessage("Account created! Please sign in.");
         setMode("signin");
+
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
