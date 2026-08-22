@@ -139,19 +139,8 @@ export async function PATCH(request: NextRequest) {
       .select()
       .maybeSingle();
 
-    // 2. If error is because leetcode_session or default_revision_intervals column is missing in DB
-    if (error && (error.message.includes("leetcode_session") || error.message.includes("default_revision_intervals"))) {
-      if (error.message.includes("leetcode_session")) delete updates.leetcode_session;
-      if (error.message.includes("default_revision_intervals")) delete updates.default_revision_intervals;
-      const res2 = await admin
-        .from("profiles")
-        .upsert({ id: user.id, ...updates })
-        .select()
-        .maybeSingle();
-      error = res2.error;
-      updated = res2.data;
-    }
-
+    // The columns leetcode_session and default_revision_intervals are now guaranteed
+    // to exist by migrations. We don't need the fallback that silently drops them.
     if (error) {
       console.error("[api/profile PATCH] DB error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -33,6 +33,7 @@ export default function NewProblemPage() {
       <div className="rounded-2xl border border-ink/10 bg-white p-5 shadow-sm sm:p-6">
         <ProblemForm
           timezone={timezone}
+          initial={{ revision_intervals: profileQuery.data?.default_revision_intervals || [5] }}
           submitLabel="Save problem"
           onSubmit={handleSubmit}
           onCancel={() => router.push("/solved")}
