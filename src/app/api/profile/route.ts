@@ -36,10 +36,13 @@ export async function GET(request: NextRequest) {
 
     if (!profile) {
       const defaultName = user.user_metadata?.display_name || user.email?.split("@")[0] || null;
+      const metaInterval = Number(user.user_metadata?.default_revision_interval);
+      const defaultIntervals = metaInterval > 0 ? [metaInterval] : [5];
       const newProfile = {
         id: user.id,
         display_name: defaultName,
         timezone: "UTC",
+        default_revision_intervals: defaultIntervals,
       };
 
       const { data: created } = await admin
@@ -108,6 +111,17 @@ export async function PATCH(request: NextRequest) {
     if (default_revision_intervals !== undefined) updates.default_revision_intervals = default_revision_intervals;
     if (email_reminders_enabled !== undefined) updates.email_reminders_enabled = email_reminders_enabled;
 
+    // Fetch old profile BEFORE updating so we know what the previous default interval was
+    let oldDefaultIntervals: number[] | null = null;
+    if (default_revision_intervals !== undefined) {
+      const { data: oldProfile } = await admin
+        .from("profiles")
+        .select("default_revision_intervals")
+        .eq("id", user.id)
+        .maybeSingle();
+      oldDefaultIntervals = oldProfile?.default_revision_intervals ?? null;
+    }
+
     // 1. Try upsert with all provided fields
     let { data: updated, error } = await admin
       .from("profiles")
@@ -131,6 +145,22 @@ export async function PATCH(request: NextRequest) {
     if (error) {
       console.error("[api/profile PATCH] DB error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // If the user changed their default revision interval, propagate it to all
+    // existing problems that were using the old default interval
+    if (default_revision_intervals && Array.isArray(default_revision_intervals) && default_revision_intervals.length > 0) {
+      // Determine which interval to look for in existing problems
+      const oldSingle = oldDefaultIntervals && oldDefaultIntervals.length === 1
+        ? oldDefaultIntervals[0]
+        : 5; // fallback hardcoded default
+
+      // Update problems that still use the old single-value default interval
+      await admin
+        .from("problems")
+        .update({ revision_intervals: default_revision_intervals })
+        .eq("user_id", user.id)
+        .eq("revision_intervals", `{${oldSingle}}`);
     }
 
     return NextResponse.json({ ok: true, profile: updated });
