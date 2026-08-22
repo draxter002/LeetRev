@@ -20,6 +20,16 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     setMessage(null);
+
+    // Guard: check Supabase env vars are configured
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || supabaseUrl.includes("placeholder") || !supabaseKey || supabaseKey.includes("placeholder")) {
+      setError("App is not configured: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is missing. Please set these in your Vercel environment variables and redeploy.");
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
     try {
@@ -28,15 +38,15 @@ export default function LoginPage() {
           email,
           password,
           options: {
-          data: {
-            display_name: displayName || email.split("@")[0],
-            default_revision_interval: String(defaultInterval ?? 5),
+            data: {
+              display_name: displayName || email.split("@")[0],
+              default_revision_interval: String(defaultInterval ?? 5),
+            },
           },
-        },
-      });
-      if (signUpError) throw signUpError;
-      setMessage("Account created. You can sign in now (confirm email if required by your project).");
-      setMode("signin");
+        });
+        if (signUpError) throw signUpError;
+        setMessage("Account created. You can sign in now (confirm email if required by your project).");
+        setMode("signin");
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -47,7 +57,12 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("networkerror")) {
+        setError("Could not connect to Supabase. Please check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set correctly in your Vercel Environment Variables, then redeploy.");
+      } else {
+        setError(msg || "Authentication failed");
+      }
     } finally {
       setLoading(false);
     }
