@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [defaultInterval, setDefaultInterval] = useState<number>(5);
+  const [defaultPriority, setDefaultPriority] = useState<"low" | "medium" | "high">("medium");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,6 +42,7 @@ export default function LoginPage() {
             data: {
               display_name: displayName || email.split("@")[0],
               default_revision_interval: String(defaultInterval ?? 5),
+              default_priority: defaultPriority,
             },
           },
         });
@@ -55,7 +57,10 @@ export default function LoginPage() {
             await fetch("/api/profile", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ default_revision_intervals: [defaultInterval ?? 5] }),
+              body: JSON.stringify({ 
+                default_revision_intervals: [defaultInterval ?? 5],
+                default_priority: defaultPriority
+              }),
             });
           } catch (_) {
             // Non-fatal: profile GET will backfill from metadata if PATCH fails
@@ -137,15 +142,36 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-ink">Default revision interval (days)</label>
+                  <label className="mb-1 block text-sm font-medium text-ink">
+                    Default revision interval (days)
+                  </label>
                   <input
                     type="number"
                     min={1}
                     value={defaultInterval}
-                    onChange={(e) => setDefaultInterval(Number(e.target.value || 5))}
+                    onChange={(e) => setDefaultInterval(Number(e.target.value) || 5)}
                     className="w-full rounded-lg border border-ink/15 px-3 py-2 outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
                   />
-                  <p className="mt-1 text-xs text-ink/45">This default interval is applied to imported/created problems unless changed per-problem.</p>
+                  <p className="mt-1 text-xs text-ink/45">
+                    How often you want to revise problems by default.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-ink">
+                    Default Priority
+                  </label>
+                  <select
+                    value={defaultPriority}
+                    onChange={(e) => setDefaultPriority(e.target.value as "low" | "medium" | "high")}
+                    className="w-full rounded-lg border border-ink/15 px-3 py-2 outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                  <p className="mt-1 text-xs text-ink/45">
+                    Default priority for imported and newly created problems.
+                  </p>
                 </div>
               </>
             )}

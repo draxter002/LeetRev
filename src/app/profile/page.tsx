@@ -65,6 +65,7 @@ export default function ProfilePage() {
   const [fetchingStats, setFetchingStats] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [defaultInterval, setDefaultInterval] = useState<number>(5);
+  const [defaultPriority, setDefaultPriority] = useState<"low" | "medium" | "high">("medium");
   const [refreshing, setRefreshing] = useState(false);
   const [showSignOutLeet, setShowSignOutLeet] = useState(false);
 
@@ -90,6 +91,7 @@ export default function ProfilePage() {
       setDefaultInterval(
         (profile.default_revision_intervals && profile.default_revision_intervals[0]) ?? 5
       );
+      setDefaultPriority(profile.default_priority ?? "medium");
       setEmailRemindersEnabled(profile.email_reminders_enabled ?? true);
     }
   }, [profile]);
@@ -112,6 +114,7 @@ export default function ProfilePage() {
         timezone,
         leetcode_username: leetcodeUsername.trim() || null,
         default_revision_intervals: [defaultInterval],
+        default_priority: defaultPriority,
         email_reminders_enabled: emailRemindersEnabled,
       }),
     onSuccess: () => {
@@ -377,6 +380,23 @@ export default function ProfilePage() {
                 />
                 <p className="mt-1 text-xs text-ink/45">
                   Applied to all imported and newly created problems.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-ink">
+                  Default Priority
+                </label>
+                <select
+                  value={defaultPriority}
+                  onChange={(e) => setDefaultPriority(e.target.value as "low" | "medium" | "high")}
+                  className="w-full rounded-lg border border-ink/15 px-3 py-2 outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+                <p className="mt-1 text-xs text-ink/45">
+                  Default priority for imported and newly created problems.
                 </p>
               </div>
 

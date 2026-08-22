@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
 
     const metaInterval = Number(user.user_metadata?.default_revision_interval);
     const metaIntervals = metaInterval > 0 ? [metaInterval] : [5];
+    const metaPriority = user.user_metadata?.default_priority || "medium";
 
     if (!profile) {
       const defaultName = user.user_metadata?.display_name || user.email?.split("@")[0] || null;
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
         display_name: defaultName,
         timezone: "UTC",
         default_revision_intervals: metaIntervals,
+        default_priority: metaPriority,
       };
 
       const { data: created } = await admin
@@ -53,11 +55,15 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       profile = created || newProfile;
-    } else if (!profile.default_revision_intervals || (profile.default_revision_intervals as number[]).length === 0) {
-      // Profile exists but default_revision_intervals was never set — backfill from signup metadata
+    } else if (!profile.default_revision_intervals || (profile.default_revision_intervals as number[]).length === 0 || !profile.default_priority) {
+      // Profile exists but fields were never set — backfill from signup metadata
+      const patchData: any = {};
+      if (!profile.default_revision_intervals || (profile.default_revision_intervals as number[]).length === 0) patchData.default_revision_intervals = metaIntervals;
+      if (!profile.default_priority) patchData.default_priority = metaPriority;
+
       const { data: patched } = await admin
         .from("profiles")
-        .update({ default_revision_intervals: metaIntervals })
+        .update(patchData)
         .eq("id", user.id)
         .select()
         .maybeSingle();
@@ -102,7 +108,15 @@ export async function PATCH(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
-    const { display_name, timezone, leetcode_username, leetcode_session, default_revision_intervals, email_reminders_enabled } = body;
+    const {
+      display_name,
+      timezone,
+      leetcode_username,
+      leetcode_session,
+      default_revision_intervals,
+      default_priority,
+      email_reminders_enabled,
+    } = body;
 
     const admin = createSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,17 +133,20 @@ export async function PATCH(request: NextRequest) {
     if (leetcode_username !== undefined) updates.leetcode_username = leetcode_username;
     if (leetcode_session !== undefined) updates.leetcode_session = leetcode_session;
     if (default_revision_intervals !== undefined) updates.default_revision_intervals = default_revision_intervals;
+    if (default_priority !== undefined) updates.default_priority = default_priority;
     if (email_reminders_enabled !== undefined) updates.email_reminders_enabled = email_reminders_enabled;
 
-    // Fetch old profile BEFORE updating so we know what the previous default interval was
+    // Fetch old profile BEFORE updating so we know what the previous default interval and priority was
     let oldDefaultIntervals: number[] | null = null;
-    if (default_revision_intervals !== undefined) {
+    let oldDefaultPriority: string | null = null;
+    if (default_revision_intervals !== undefined || default_priority !== undefined) {
       const { data: oldProfile } = await admin
         .from("profiles")
-        .select("default_revision_intervals")
+        .select("default_revision_intervals, default_priority")
         .eq("id", user.id)
         .maybeSingle();
       oldDefaultIntervals = oldProfile?.default_revision_intervals ?? null;
+      oldDefaultPriority = oldProfile?.default_priority ?? null;
     }
 
     // 1. Try upsert with all provided fields
@@ -162,7 +179,16 @@ export async function PATCH(request: NextRequest) {
         .eq("revision_intervals", `{${oldSingle}}`);
     }
 
-    return NextResponse.json({ ok: true, profile: updated });
+    // If the user changed their default priority, propagate it to existing problems that were using the old default
+    if (default_priority && oldDefaultPriority && default_priority !== oldDefaultPriority) {
+      await admin
+        .from("problems")
+        .update({ priority: default_priority })
+        .eq("user_id", user.id)
+        .eq("priority", oldDefaultPriority);
+    }
+
+    return NextResponse.json({ profile: updated });
   } catch (err) {
     console.error("[api/profile PATCH] Fatal error:", err);
     return NextResponse.json(

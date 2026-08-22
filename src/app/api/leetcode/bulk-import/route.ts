@@ -88,10 +88,10 @@ export async function POST(request: NextRequest) {
       { auth: { persistSession: false } }
     );
 
-    // Fetch user profile for default revision intervals
+    // Fetch user profile for default revision intervals and priority
     const { data: profile } = await admin
       .from("profiles")
-      .select("default_revision_intervals")
+      .select("default_revision_intervals, default_priority")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
       profile?.default_revision_intervals && profile.default_revision_intervals.length > 0
         ? profile.default_revision_intervals
         : [5];
+    const defaultPriority = profile?.default_priority || "medium";
 
     // Fetch all existing problems for this user to dedupe
     const { data: existingRows } = await admin
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         title: parsed.title,
         topic: "LeetCode Fetched",
-        priority: "medium",
+        priority: defaultPriority,
         revision_intervals: defaultIntervals,
         problem_link: parsed.link,
         leetcode_slug: parsed.slug,
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
 
       // Fallback 1: if priority constraint fails
       if (insErr && (insErr.message.includes("priority") || insErr.code === "23502" || insErr.code === "23514")) {
-        insertBatch = insertBatch.map((p) => ({ ...p, priority: "medium" }));
+        insertBatch = insertBatch.map((p) => ({ ...p, priority: defaultPriority }));
         const res2 = await admin.from("problems").insert(insertBatch).select("id");
         insErr = res2.error;
         data = res2.data;
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
       // Fallback 2: if leetcode_slug / source columns missing
       if (insErr && (insErr.message.includes("leetcode_slug") || insErr.message.includes("source"))) {
         insertBatch = insertBatch.map((p) => {
-          const c = { ...p, priority: p.priority || "medium" };
+          const c = { ...p, priority: p.priority || defaultPriority };
           delete c.leetcode_slug;
           delete c.source;
           return c;

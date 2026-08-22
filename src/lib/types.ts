@@ -26,6 +26,7 @@ export type Profile = {
   email_reminders_enabled?: boolean;
   // default intervals to use when seeding/importing problems
   default_revision_intervals?: number[];
+  default_priority?: Priority;
   created_at: string;
   updated_at: string;
 };

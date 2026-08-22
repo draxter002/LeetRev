@@ -85,7 +85,7 @@ export async function fetchUserStreaks(timezone: string): Promise<StreakResult> 
 }
 
 export async function updateProfile(
-  updates: Partial<Pick<Profile, "display_name" | "timezone" | "leetcode_username" | "default_revision_intervals" | "email_reminders_enabled">>
+  updates: Partial<Pick<Profile, "display_name" | "timezone" | "leetcode_username" | "default_revision_intervals" | "default_priority" | "email_reminders_enabled">>
 ): Promise<Profile> {
   const res = await fetch("/api/profile", {
     method: "PATCH",
@@ -187,6 +187,15 @@ export async function fetchDueRevisions(
       if (overdueIds.includes(row.id)) row.status = "missed";
     }
   }
+
+  // Sort rows by priority (high > medium > low), then by scheduled date
+  const priorityScore = { high: 3, medium: 2, low: 1 };
+  rows.sort((a, b) => {
+    const pA = priorityScore[a.problems?.priority || "medium"];
+    const pB = priorityScore[b.problems?.priority || "medium"];
+    if (pA !== pB) return pB - pA; // Descending
+    return a.scheduled_date.localeCompare(b.scheduled_date);
+  });
 
   return rows;
 }

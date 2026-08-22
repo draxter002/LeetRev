@@ -32,10 +32,10 @@ export async function POST(request: NextRequest) {
       { auth: { persistSession: false } }
     );
 
-    // Fetch saved session cookie and default intervals from profile
+    // Fetch saved session cookie and default intervals/priority from profile
     const { data: profile } = await admin
       .from("profiles")
-      .select("leetcode_session, default_revision_intervals")
+      .select("leetcode_session, default_revision_intervals, default_priority")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       profile?.default_revision_intervals && profile.default_revision_intervals.length > 0
         ? profile.default_revision_intervals
         : [5];
+    const defaultPriority = profile?.default_priority || "medium";
 
     // Build the cookie header
     const cookieHeader = effectiveCookie.includes("LEETCODE_SESSION=")
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         title: item.title,
         topic: "LeetCode Fetched",
-        priority: "medium",
+        priority: defaultPriority,
         revision_intervals: defaultIntervals,
         problem_link: slug ? `https://leetcode.com/problems/${slug}` : null,
         leetcode_slug: slug,
