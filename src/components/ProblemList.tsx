@@ -2,11 +2,122 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { ProblemWithNextRevision } from "@/lib/api";
-import type { RevisionEntry } from "@/lib/types";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { uncompleteRevision, type ProblemWithNextRevision } from "@/lib/api";
+import type { RevisionEntry, RevisionEntryWithProblem } from "@/lib/types";
 import { PriorityBadge, PriorityDot } from "./PriorityBadge";
 import { SolutionDisplay } from "./SolutionDisplay";
-import { isOverdue, todayInTimezone } from "@/lib/scheduling";
+import { isOverdue, StreakResult, todayInTimezone } from "@/lib/scheduling";
+import { ProblemLinkButton } from "./PlatformIcon";
+
+function RevisionHistoryItem({
+  item,
+  timezone,
+}: {
+  item: { id: string; problem_id: string; completed_date: string | null; interval_label: string };
+  timezone: string;
+}) {
+  const queryClient = useQueryClient();
+  const today = todayInTimezone(timezone);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      uncompleteRevision(
+        {
+          id: item.id,
+          user_id: "",
+          problem_id: item.problem_id,
+          scheduled_date: item.completed_date || today,
+          interval_days: parseInt(item.interval_label) || 1,
+          interval_label: item.interval_label,
+          status: "done",
+          completed_date: item.completed_date,
+          created_at: "",
+        },
+        timezone
+      ),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["due-revisions"] });
+      await queryClient.cancelQueries({ queryKey: ["user-streaks"] });
+      await queryClient.cancelQueries({ queryKey: ["completed-revisions"] });
+      await queryClient.cancelQueries({ queryKey: ["pending-revisions"] });
+
+      const previousDue = queryClient.getQueriesData<RevisionEntryWithProblem[]>({ queryKey: ["due-revisions"] });
+      const previousStreaks = queryClient.getQueriesData<StreakResult>({ queryKey: ["user-streaks"] });
+      const previousCompleted = queryClient.getQueriesData<{ id: string; problem_id: string; completed_date: string | null; interval_label: string }[]>({ queryKey: ["completed-revisions"] });
+
+      // Optimistically remove from completed-revisions
+      queryClient.setQueriesData<
+        { id: string; problem_id: string; completed_date: string | null; interval_label: string }[]
+      >({ queryKey: ["completed-revisions"] }, (old = []) => old.filter((c) => c.id !== item.id));
+
+      // Optimistically update due-revisions
+      queryClient.setQueriesData<RevisionEntryWithProblem[]>(
+        { queryKey: ["due-revisions"] },
+        (old = []) =>
+          old.map((r) =>
+            r.id === item.id ? { ...r, status: "pending", completed_date: null } : r
+          )
+      );
+
+      // Optimistically update streak if completed_date was today
+      if (item.completed_date === today) {
+        queryClient.setQueriesData<StreakResult>(
+          { queryKey: ["user-streaks"] },
+          (old) => {
+            if (!old) return { currentStreak: 0, longestStreak: 0 };
+            const dueList = queryClient.getQueryData<RevisionEntryWithProblem[]>(["due-revisions", timezone]) ?? [];
+            const remainingCompletionsToday = dueList.filter(
+              (e) => e.id !== item.id && e.status === "done" && e.completed_date === today
+            ).length;
+            const newStreak = remainingCompletionsToday === 0 ? Math.max(0, old.currentStreak - 1) : old.currentStreak;
+            return {
+              currentStreak: newStreak,
+              longestStreak: old.longestStreak,
+            };
+          }
+        );
+      }
+
+      return { previousDue, previousStreaks, previousCompleted };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousDue) context.previousDue.forEach(([k, d]) => queryClient.setQueryData(k, d));
+      if (context?.previousStreaks) context.previousStreaks.forEach(([k, d]) => queryClient.setQueryData(k, d));
+      if (context?.previousCompleted) context.previousCompleted.forEach(([k, d]) => queryClient.setQueryData(k, d));
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["due-revisions"] });
+      queryClient.invalidateQueries({ queryKey: ["problems"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-revisions"] });
+      queryClient.invalidateQueries({ queryKey: ["completed-revisions"] });
+      queryClient.invalidateQueries({ queryKey: ["user-streaks"] });
+    },
+  });
+
+  return (
+    <li className="flex items-center justify-between gap-2 text-xs text-ink/75">
+      <div className="flex items-center gap-2">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
+          ✓
+        </span>
+        <span className="font-semibold text-ink">{item.interval_label}</span>
+        <span className="text-ink/45">
+          {item.completed_date ? `completed on ${item.completed_date}` : "completed"}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => mutation.mutate()}
+        disabled={mutation.isPending}
+        className="text-[11px] text-ink/40 hover:text-rose-600 hover:underline disabled:opacity-50"
+        title="Undo this completed revision"
+      >
+        {mutation.isPending ? "Undoing…" : "Undo"}
+      </button>
+    </li>
+  );
+}
 
 export function ProblemList({
   problems,
@@ -114,14 +225,7 @@ export function ProblemList({
                       </span>
                     )}
                     {problem.problem_link && (
-                      <a
-                        href={problem.problem_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-medium text-teal hover:underline"
-                      >
-                        Open on LeetCode →
-                      </a>
+                      <ProblemLinkButton url={problem.problem_link} showLabel={true} />
                     )}
                     <Link
                       href={`/solved/${problem.id}/edit`}
@@ -171,18 +275,7 @@ export function ProblemList({
                       ) : (
                         <ul className="space-y-1.5">
                           {doneTracks.map((d) => (
-                            <li
-                              key={d.id}
-                              className="flex items-center gap-2 text-xs text-ink/75"
-                            >
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
-                                ✓
-                              </span>
-                              <span className="font-semibold text-ink">{d.interval_label}</span>
-                              <span className="text-ink/45">
-                                {d.completed_date ? `completed on ${d.completed_date}` : "completed"}
-                              </span>
-                            </li>
+                            <RevisionHistoryItem key={d.id} item={d} timezone={timezone} />
                           ))}
                         </ul>
                       )}
