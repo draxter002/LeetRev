@@ -3,124 +3,90 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { todayInTimezone, calculateStreaks } from "@/lib/scheduling";
 
-export async function POST(request: NextRequest) {
-  try {
-    const serverSupabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll() {},
-        },
-      }
-    );
+async function processUserReminder(
+  admin: any,
+  user: { id: string; email?: string | null },
+  profile: any,
+  requestOrigin: string
+) {
+  const remindersEnabled = profile?.email_reminders_enabled !== false;
+  if (!remindersEnabled) {
+    return { status: "skipped", reason: "Email reminders are disabled in profile settings." };
+  }
 
-    const {
-      data: { user },
-    } = await serverSupabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const timezone = profile?.timezone || "UTC";
+  const today = todayInTimezone(timezone);
+  const userEmail = user.email || profile?.leetcode_username;
 
-    const admin = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } }
-    );
+  if (!userEmail) {
+    return { status: "skipped", reason: "No email address found for this user." };
+  }
 
-    // 1. Fetch user profile
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
+  const displayName = profile?.display_name || user.email?.split("@")[0] || "Friend";
 
-    const remindersEnabled = profile?.email_reminders_enabled !== false; // Default true
-    if (!remindersEnabled) {
-      return NextResponse.json({
-        ok: true,
-        sent: false,
-        reason: "Email reminders are disabled in profile settings.",
-      });
+  // Fetch due revisions for today
+  const { data: dueData } = await admin
+    .from("revision_entries")
+    .select("id, scheduled_date, interval_label, problems(id, title, topic, priority, revision_disabled)")
+    .eq("user_id", user.id)
+    .in("status", ["pending", "missed"])
+    .lte("scheduled_date", today)
+    .order("scheduled_date", { ascending: true });
+
+  const rawRows = (dueData ?? []) as any[];
+  const dueRevisions = rawRows.filter((r) => r.problems?.revision_disabled !== true);
+
+  if (dueRevisions.length === 0) {
+    return { status: "skipped", reason: "No problems due for revision today.", dueCount: 0 };
+  }
+
+  // Calculate current streak
+  const { data: revDone } = await admin
+    .from("revision_entries")
+    .select("completed_date")
+    .eq("user_id", user.id)
+    .eq("status", "done")
+    .not("completed_date", "is", null);
+
+  const { data: revMissed } = await admin
+    .from("revision_entries")
+    .select("scheduled_date")
+    .eq("user_id", user.id)
+    .in("status", ["missed", "pending"])
+    .lt("scheduled_date", today);
+
+  const { data: probData } = await admin
+    .from("problems")
+    .select("date_solved, date_added")
+    .eq("user_id", user.id);
+
+  const activeDates: string[] = [];
+  if (revDone) {
+    for (const r of revDone) if (r.completed_date) activeDates.push(r.completed_date);
+  }
+  if (probData) {
+    for (const p of probData) {
+      if (p.date_solved) activeDates.push(p.date_solved);
+      if (p.date_added) activeDates.push(p.date_added);
     }
+  }
 
-    const timezone = profile?.timezone || "UTC";
-    const today = todayInTimezone(timezone);
-    const userEmail = user.email || profile?.leetcode_username || "user@app.com";
-    const displayName = profile?.display_name || user.email?.split("@")[0] || "Friend";
+  const missedDates: string[] = [];
+  if (revMissed) {
+    for (const m of revMissed) if (m.scheduled_date) missedDates.push(m.scheduled_date);
+  }
 
-    // 2. Fetch due revisions for today
-    const { data: dueData } = await admin
-      .from("revision_entries")
-      .select("id, scheduled_date, interval_label, problems(id, title, topic, priority)")
-      .eq("user_id", user.id)
-      .in("status", ["pending", "missed"])
-      .lte("scheduled_date", today)
-      .order("scheduled_date", { ascending: true });
+  const streaks = calculateStreaks(activeDates, missedDates, today);
+  const currentStreak = streaks.currentStreak;
 
-    const dueRevisions = (dueData ?? []) as any[];
+  const revisionLink = `${requestOrigin}/`;
+  const subject = "Let the streak number only go up. Here is your reminder for daily revision";
 
-    // Rule: DON'T send mail if there is no problem for revision
-    if (dueRevisions.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        sent: false,
-        dueCount: 0,
-        message: "No problems due for revision today. Reminder email was not sent.",
-      });
-    }
+  const problemListText = dueRevisions
+    .map((r) => `  • ${r.problems?.title ?? "Problem"} (${r.problems?.topic ?? "DSA"} · ${r.interval_label})`)
+    .join("\n");
 
-    // 3. Calculate current streak
-    const { data: revDone } = await admin
-      .from("revision_entries")
-      .select("completed_date")
-      .eq("user_id", user.id)
-      .eq("status", "done")
-      .not("completed_date", "is", null);
-
-    const { data: revMissed } = await admin
-      .from("revision_entries")
-      .select("scheduled_date")
-      .eq("user_id", user.id)
-      .in("status", ["missed", "pending"])
-      .lt("scheduled_date", today);
-
-    const { data: probData } = await admin
-      .from("problems")
-      .select("date_solved, date_added")
-      .eq("user_id", user.id);
-
-    const activeDates: string[] = [];
-    if (revDone) {
-      for (const r of revDone) if (r.completed_date) activeDates.push(r.completed_date);
-    }
-    if (probData) {
-      for (const p of probData) {
-        if (p.date_solved) activeDates.push(p.date_solved);
-        if (p.date_added) activeDates.push(p.date_added);
-      }
-    }
-
-    const missedDates: string[] = [];
-    if (revMissed) {
-      for (const m of revMissed) if (m.scheduled_date) missedDates.push(m.scheduled_date);
-    }
-
-    const streaks = calculateStreaks(activeDates, missedDates, today);
-    const currentStreak = streaks.currentStreak;
-
-    // 4. Construct email payload
-    const origin = request.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const revisionLink = `${origin}/`;
-
-    const subject = "Let the streak number only go up. Here is your reminder for daily revision";
-
-    const problemListText = dueRevisions
-      .map((r) => `  • ${r.problems?.title ?? "Problem"} (${r.problems?.topic ?? "DSA"} · ${r.interval_label})`)
-      .join("\n");
-
-    const emailTextBody = `Hi ${displayName},
+  const emailTextBody = `Hi ${displayName},
 
 Let the streak number only go up 🔥 (Current streak: ${currentStreak} day${currentStreak === 1 ? "" : "s"}).
 
@@ -135,63 +101,209 @@ ${revisionLink}
 Keep up the great work!
 - LeetRevision Team`;
 
-    console.log("================== REMINDER EMAIL DISPATCH ==================");
-    console.log(`To: ${userEmail}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Body:\n${emailTextBody}`);
-    console.log("=============================================================");
+  console.log("================== REMINDER EMAIL DISPATCH ==================");
+  console.log(`To: ${userEmail}`);
+  console.log(`Subject: ${subject}`);
+  console.log(`Body:\n${emailTextBody}`);
+  console.log("=============================================================");
 
-    let emailSent = false;
-    let emailError: string | null = null;
+  let emailSent = false;
+  let emailError: string | null = null;
 
-    if (process.env.RESEND_API_KEY) {
-      try {
-        const recipient = process.env.FEEDBACK_RECIPIENT_EMAIL || userEmail;
-        const emailRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: "LeetRevision Reminder <onboarding@resend.dev>",
-            to: recipient,
-            subject: subject,
-            text: emailTextBody,
-          }),
-        });
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "LeetRevision Reminder <onboarding@resend.dev>";
+      let recipient = userEmail;
 
-        if (emailRes.ok) {
-          emailSent = true;
-        } else {
-          const errJson = await emailRes.json().catch(() => ({}));
-          emailError = errJson.message || `Resend HTTP ${emailRes.status}`;
-          console.warn("[reminders] Resend error:", emailError);
+      let res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: recipient,
+          subject: subject,
+          text: emailTextBody,
+        }),
+      });
+
+      if (res.ok) {
+        emailSent = true;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        emailError = errJson.message || `Resend HTTP ${res.status}`;
+        console.warn("[reminders] Resend primary dispatch error:", emailError);
+
+        // Fallback for Resend testing sandbox restrictions
+        if (
+          emailError?.includes("onboarding@resend.dev") &&
+          process.env.FEEDBACK_RECIPIENT_EMAIL &&
+          process.env.FEEDBACK_RECIPIENT_EMAIL !== recipient
+        ) {
+          console.log("[reminders] Retrying with FEEDBACK_RECIPIENT_EMAIL fallback:", process.env.FEEDBACK_RECIPIENT_EMAIL);
+          const fallbackRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+            },
+            body: JSON.stringify({
+              from: fromEmail,
+              to: process.env.FEEDBACK_RECIPIENT_EMAIL,
+              subject: `[For: ${userEmail}] ${subject}`,
+              text: emailTextBody,
+            }),
+          });
+
+          if (fallbackRes.ok) {
+            emailSent = true;
+            emailError = null;
+          }
         }
-      } catch (err) {
-        emailError = err instanceof Error ? err.message : String(err);
-        console.warn("[reminders] Dispatch error:", err);
       }
-    } else {
-      console.log("[reminders] RESEND_API_KEY not configured. Email logged to console.");
-      emailSent = true; // Logged mode
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : String(err);
+      console.warn("[reminders] Resend fetch exception:", emailError);
     }
+  } else {
+    console.log("[reminders] RESEND_API_KEY not set. Email dispatch simulated.");
+    emailSent = true;
+  }
+
+  return {
+    status: emailSent ? "sent" : "failed",
+    userEmail,
+    dueCount: dueRevisions.length,
+    currentStreak,
+    error: emailError,
+  };
+}
+
+async function handleReminders(request: NextRequest) {
+  try {
+    const origin = request.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+    const admin = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // Try user authentication via session cookie (for manual "Send Test Email" calls)
+    const serverSupabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll() {},
+        },
+      }
+    );
+
+    const {
+      data: { user: currentUser },
+    } = await serverSupabase.auth.getUser();
+
+    // Check if auth secret or CRON secret was supplied for cron calls
+    const authHeader = request.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    const isCronAuthorized = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+    if (currentUser && !isCronAuthorized) {
+      // Single user trigger (e.g. from Profile page test button)
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+
+      const result = await processUserReminder(admin, currentUser, profile, origin);
+
+      if (result.status === "skipped") {
+        return NextResponse.json({
+          ok: true,
+          sent: false,
+          reason: result.reason,
+          message: result.reason,
+        });
+      }
+
+      if (result.status === "failed") {
+        return NextResponse.json(
+          {
+            ok: false,
+            sent: false,
+            error: result.error,
+            message: `Could not send email: ${result.error}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        sent: true,
+        dueCount: result.dueCount,
+        currentStreak: result.currentStreak,
+        message: `Reminder email sent successfully to ${result.userEmail}! (${result.dueCount} due problem${result.dueCount === 1 ? "" : "s"})`,
+      });
+    }
+
+    // Cron / Batch mode: Send reminders to ALL eligible users
+    console.log("[reminders] Executing cron batch dispatch for all users...");
+
+    // Fetch users from Supabase Auth & Profiles
+    const { data: profiles, error: profErr } = await admin.from("profiles").select("*");
+    if (profErr) throw profErr;
+
+    let authUsersMap = new Map<string, { id: string; email?: string }>();
+    try {
+      const { data: authData } = await admin.auth.admin.listUsers();
+      if (authData?.users) {
+        for (const u of authData.users) {
+          authUsersMap.set(u.id, { id: u.id, email: u.email });
+        }
+      }
+    } catch (e) {
+      console.warn("[reminders] Could not list auth users:", e);
+    }
+
+    const results: any[] = [];
+    for (const profile of profiles ?? []) {
+      const authUser = authUsersMap.get(profile.id) || { id: profile.id, email: null };
+      const res = await processUserReminder(admin, authUser, profile, origin);
+      results.push({ profileId: profile.id, ...res });
+    }
+
+    const sentCount = results.filter((r) => r.status === "sent").length;
+    const skippedCount = results.filter((r) => r.status === "skipped").length;
 
     return NextResponse.json({
       ok: true,
-      sent: emailSent,
-      dueCount: dueRevisions.length,
-      currentStreak,
-      emailError,
-      message: emailSent
-        ? `Reminder email sent successfully! (${dueRevisions.length} due problem${dueRevisions.length === 1 ? "" : "s"})`
-        : `Could not send email: ${emailError}`,
+      mode: "cron",
+      totalProcessed: results.length,
+      sentCount,
+      skippedCount,
+      results,
     });
   } catch (err) {
     console.error("[reminders] Fatal error:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to send reminder" },
+      { error: err instanceof Error ? err.message : "Failed to send reminders" },
       { status: 500 }
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  return handleReminders(request);
+}
+
+export async function POST(request: NextRequest) {
+  return handleReminders(request);
 }
