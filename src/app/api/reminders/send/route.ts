@@ -1,7 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 import { todayInTimezone, calculateStreaks } from "@/lib/scheduling";
+
+// Create reusable Nodemailer transporter if Gmail credentials are provided
+function createTransporter() {
+  const user = process.env.GMAIL_USER || process.env.SMTP_USER;
+  const pass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "").replace(/\s+/g, "");
+
+  if (user && pass) {
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: user,
+        pass: pass,
+      },
+    });
+  }
+  return null;
+}
+
+async function sendEmail({
+  to,
+  subject,
+  text,
+}: {
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<{ ok: boolean; method: string; error?: string }> {
+  // 1. Try Gmail SMTP via Nodemailer (Free, no domain needed, sends to any recipient)
+  const transporter = createTransporter();
+  if (transporter) {
+    try {
+      const fromUser = process.env.GMAIL_USER || process.env.SMTP_USER;
+      await transporter.sendMail({
+        from: `LeetRevision Reminder <${fromUser}>`,
+        to: to,
+        subject: subject,
+        text: text,
+      });
+      return { ok: true, method: "Gmail SMTP" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn("[reminders] Gmail SMTP dispatch error:", msg);
+      // If Gmail fails, fall through to Resend if configured
+    }
+  }
+
+  // 2. Try Resend API if configured
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "LeetRevision Reminder <onboarding@resend.dev>";
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: to,
+          subject: subject,
+          text: text,
+        }),
+      });
+
+      if (res.ok) {
+        return { ok: true, method: "Resend API" };
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        const emailError = errJson.message || `Resend HTTP ${res.status}`;
+        console.warn("[reminders] Resend API error:", emailError);
+        return { ok: false, method: "Resend API", error: emailError };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, method: "Resend API", error: msg };
+    }
+  }
+
+  // 3. Simulated mode (No email provider configured)
+  console.log(`[reminders] Simulated email dispatch to ${to}`);
+  return { ok: true, method: "Simulated" };
+}
 
 async function processUserReminder(
   admin: any,
@@ -107,77 +190,19 @@ Keep up the great work!
   console.log(`Body:\n${emailTextBody}`);
   console.log("=============================================================");
 
-  let emailSent = false;
-  let emailError: string | null = null;
-
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || "LeetRevision Reminder <onboarding@resend.dev>";
-      let recipient = userEmail;
-
-      let res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: recipient,
-          subject: subject,
-          text: emailTextBody,
-        }),
-      });
-
-      if (res.ok) {
-        emailSent = true;
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        emailError = errJson.message || `Resend HTTP ${res.status}`;
-        console.warn("[reminders] Resend primary dispatch error:", emailError);
-
-        // Fallback for Resend testing sandbox restrictions
-        if (
-          emailError?.includes("onboarding@resend.dev") &&
-          process.env.FEEDBACK_RECIPIENT_EMAIL &&
-          process.env.FEEDBACK_RECIPIENT_EMAIL !== recipient
-        ) {
-          console.log("[reminders] Retrying with FEEDBACK_RECIPIENT_EMAIL fallback:", process.env.FEEDBACK_RECIPIENT_EMAIL);
-          const fallbackRes = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-            },
-            body: JSON.stringify({
-              from: fromEmail,
-              to: process.env.FEEDBACK_RECIPIENT_EMAIL,
-              subject: `[For: ${userEmail}] ${subject}`,
-              text: emailTextBody,
-            }),
-          });
-
-          if (fallbackRes.ok) {
-            emailSent = true;
-            emailError = null;
-          }
-        }
-      }
-    } catch (err) {
-      emailError = err instanceof Error ? err.message : String(err);
-      console.warn("[reminders] Resend fetch exception:", emailError);
-    }
-  } else {
-    console.log("[reminders] RESEND_API_KEY not set. Email dispatch simulated.");
-    emailSent = true;
-  }
+  const dispatchResult = await sendEmail({
+    to: userEmail,
+    subject: subject,
+    text: emailTextBody,
+  });
 
   return {
-    status: emailSent ? "sent" : "failed",
+    status: dispatchResult.ok ? "sent" : "failed",
     userEmail,
+    method: dispatchResult.method,
     dueCount: dueRevisions.length,
     currentStreak,
-    error: emailError,
+    error: dispatchResult.error,
   };
 }
 
@@ -239,7 +264,7 @@ async function handleReminders(request: NextRequest) {
             ok: false,
             sent: false,
             error: result.error,
-            message: `Could not send email: ${result.error}`,
+            message: `Could not send email via ${result.method}: ${result.error}`,
           },
           { status: 400 }
         );
@@ -248,9 +273,10 @@ async function handleReminders(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         sent: true,
+        method: result.method,
         dueCount: result.dueCount,
         currentStreak: result.currentStreak,
-        message: `Reminder email sent successfully to ${result.userEmail}! (${result.dueCount} due problem${result.dueCount === 1 ? "" : "s"})`,
+        message: `Reminder email sent successfully via ${result.method} to ${result.userEmail}! (${result.dueCount} due problem${result.dueCount === 1 ? "" : "s"})`,
       });
     }
 
