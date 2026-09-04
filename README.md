@@ -19,7 +19,7 @@ A spaced repetition and revision tracking application for coding problems (e.g.,
 - **Frameworks/Libraries:** Next.js (App Router), React, Tailwind CSS, React Query
 - **Database:** Supabase (PostgreSQL)
 - **APIs/Services:** Supabase Auth, Next.js Serverless Functions
-- **Deployment Platform:** Vercel (Recommended)
+- **Deployment Platform:** Vercel 
 
 ## Screenshots
 1.Landing Page which shows all your revision queues.

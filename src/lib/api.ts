@@ -158,16 +158,26 @@ export async function fetchDueRevisions(
   const supabase = createClient();
   const today = todayInTimezone(timezone);
 
-  const { data, error } = await supabase
-    .from("revision_entries")
-    .select("*, problems (id, title, topic, priority, problem_link, revision_disabled)")
-    .in("status", ["pending", "missed"])
-    .lte("scheduled_date", today)
-    .order("scheduled_date", { ascending: true });
+  const [dueRes, doneRes] = await Promise.all([
+    supabase
+      .from("revision_entries")
+      .select("*, problems (id, title, topic, priority, problem_link, revision_disabled)")
+      .in("status", ["pending", "missed"])
+      .lte("scheduled_date", today),
+    supabase
+      .from("revision_entries")
+      .select("*, problems (id, title, topic, priority, problem_link, revision_disabled)")
+      .eq("status", "done")
+      .eq("completed_date", today),
+  ]);
 
-  if (error) throw error;
+  if (dueRes.error) throw dueRes.error;
+  if (doneRes.error) throw doneRes.error;
 
-  const rawRows = (data ?? []) as (RevisionEntryWithProblem & { problems?: { revision_disabled?: boolean } })[];
+  const rawRows = [
+    ...(dueRes.data ?? []),
+    ...(doneRes.data ?? []),
+  ] as (RevisionEntryWithProblem & { problems?: { revision_disabled?: boolean } })[];
 
   // Filter out any entries for problems where revision_disabled is true
   const rows = rawRows.filter((r) => r.problems?.revision_disabled !== true);
@@ -188,12 +198,18 @@ export async function fetchDueRevisions(
     }
   }
 
-  // Sort rows by priority (high > medium > low), then by scheduled date
+  // Sort rows: active first (pending/missed), then by priority (high > medium > low), then scheduled date.
+  // Completed (done) items are sorted to the bottom.
   const priorityScore = { high: 3, medium: 2, low: 1 };
   rows.sort((a, b) => {
+    const aDone = a.status === "done" ? 1 : 0;
+    const bDone = b.status === "done" ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+
     const pA = priorityScore[a.problems?.priority || "medium"];
     const pB = priorityScore[b.problems?.priority || "medium"];
-    if (pA !== pB) return pB - pA; // Descending
+    if (pA !== pB) return pB - pA;
+
     return a.scheduled_date.localeCompare(b.scheduled_date);
   });
 
@@ -230,6 +246,32 @@ export async function completeRevision(
   });
 
   if (insertError) throw insertError;
+}
+
+export async function uncompleteRevision(
+  entry: RevisionEntry,
+  timezone: string
+): Promise<void> {
+  const supabase = createClient();
+  const today = todayInTimezone(timezone);
+  const overdue = isOverdue(entry.scheduled_date, today);
+  const newStatus = overdue ? "missed" : "pending";
+
+  const { error: updateError } = await supabase
+    .from("revision_entries")
+    .update({ status: newStatus, completed_date: null })
+    .eq("id", entry.id);
+
+  if (updateError) throw updateError;
+
+  const next = nextRevisionAfterComplete(entry.scheduled_date, entry.interval_days);
+  await supabase
+    .from("revision_entries")
+    .delete()
+    .eq("problem_id", entry.problem_id)
+    .eq("interval_days", entry.interval_days)
+    .eq("scheduled_date", next.scheduled_date)
+    .eq("status", "pending");
 }
 
 function normalizeSolutions(solutions: Solutions): Solutions {

@@ -28,27 +28,28 @@ export default function HomePage() {
   });
 
   const due = dueQuery.data ?? [];
+  const totalCount = due.length;
+  const completedCount = due.filter((e) => e.status === "done").length;
   const missedCount = due.filter(
-    (e) => e.status === "missed" || e.scheduled_date < today
+    (e) => e.status === "missed" || (e.status !== "done" && e.scheduled_date < today)
   ).length;
+  const remainingCount = totalCount - completedCount;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const currentStreak = streakQuery.data?.currentStreak ?? 0;
 
   return (
     <AppShell>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-teal">Today</p>
           <h1 className="mt-1 font-display text-3xl text-ink">Revision queue</h1>
-          <p className="mt-1 text-sm text-ink/55">
+          <p className="mt-1 text-sm text-ink/60">
             {today}
-            {due.length > 0 && (
+            {totalCount > 0 && (
               <>
                 {" "}
-                · {due.length} due
-                {missedCount > 0 && (
-                  <span className="text-missed"> · {missedCount} missed</span>
-                )}
+                · <span className="font-medium text-ink">{completedCount} of {totalCount} completed</span> ({progressPercent}%)
               </>
             )}
           </p>
@@ -70,6 +71,37 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {totalCount > 0 && (
+        <div className="mb-6 space-y-2 rounded-xl border border-ink/10 bg-white/70 p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-xs font-medium">
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-teal">✓ {completedCount} Done</span>
+              <span className="text-ink/60">{remainingCount} Remaining</span>
+              {missedCount > 0 && (
+                <span className="font-semibold text-missed">{missedCount} Missed</span>
+              )}
+            </div>
+            <span className="font-semibold text-ink/70">{progressPercent}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-ink/10">
+            <div
+              className="h-full bg-teal transition-all duration-300 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {totalCount > 0 && completedCount === totalCount && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-teal/30 bg-teal/10 px-4 py-3 text-sm text-teal-900">
+          <span className="text-lg">🎉</span>
+          <div>
+            <p className="font-semibold">All done for today!</p>
+            <p className="text-xs text-teal-800/80">You completed all scheduled revisions in today's queue.</p>
+          </div>
+        </div>
+      )}
 
       {(profileQuery.isLoading || dueQuery.isLoading) && (
         <div className="space-y-3">
