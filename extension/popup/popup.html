@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeetRev Companion</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { width: 360px; background: #0f172a; color: #f8fafc; padding: 16px; }
+    .header { display: flex; items-center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-b: 1px solid #334155; }
+    .logo { display: flex; items-center; gap: 8px; font-weight: 700; font-size: 16px; color: #fb923c; }
+    .badge { font-size: 10px; background: #334155; color: #94a3b8; padding: 2px 6px; borderRadius: 6px; font-weight: 600; }
+    
+    .sync-banner { background: linear-gradient(135deg, #ea580c, #d97706); padding: 12px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25); text-align: center; }
+    .sync-banner h2 { font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 4px; }
+    .sync-banner p { font-size: 11px; color: #ffedd5; margin-bottom: 10px; opacity: 0.9; }
+    .btn-sync-all { width: 100%; background: #ffffff; color: #9a3412; font-weight: 700; font-size: 13px; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: transform 0.1s, background 0.2s; }
+    .btn-sync-all:hover { background: #fff7ed; transform: scale(1.02); }
+    .btn-sync-all:active { transform: scale(0.98); }
+
+    .target-url-group { margin-bottom: 14px; }
+    .target-url-group label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; tracking: 0.5px; color: #64748b; margin-bottom: 4px; }
+    .target-url-input { width: 100%; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; font-size: 11px; padding: 6px 10px; border-radius: 6px; }
+    
+    .platform-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .platform-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 8px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
+    .platform-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 12px; display: flex; items-center; justify-content: space-between; }
+    .platform-info { display: flex; items-center; gap: 8px; font-size: 12px; font-weight: 600; }
+    .status-pill { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+    .status-connected { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .status-disconnected { background: rgba(148, 163, 184, 0.1); color: #64748b; }
+
+    .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #64748b; border-t: 1px solid #334155; padding-top: 10px; }
+    .footer a { color: #fb923c; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <span>🔥 LeetRev</span>
+    </div>
+    <span class="badge">Multi-Platform v1.0</span>
+  </div>
+
+  <div class="sync-banner">
+    <h2>Multi-Platform Session Sync</h2>
+    <p>Automatically detect & sync active coding profiles to LeetRev</p>
+    <button id="btnSyncAll" class="btn-sync-all">🚀 Sync All Platforms Now</button>
+  </div>
+
+  <div class="target-url-group">
+    <label for="leetrevUrl">LeetRev Target URL</label>
+    <input type="text" id="leetrevUrl" class="target-url-input" value="http://localhost:3000" placeholder="e.g. https://leetrev.vercel.app">
+  </div>
+
+  <div class="platform-title">
+    <span>Supported Platforms (9)</span>
+    <span id="connectedCount" style="color: #4ade80;">0 Active</span>
+  </div>
+
+  <div class="platform-grid" id="platformGrid">
+    <!-- Populated by popup.js -->
+  </div>
+
+  <div class="footer">
+    Need help? <a href="#" id="openHelpLink">View Extension Setup Guide</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

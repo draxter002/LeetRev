@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "LeetRev - Multi-Platform Coding Sync",
+  "version": "1.0.0",
+  "description": "1-click sync your solved problems from LeetCode, Codeforces, CodeChef, GeeksforGeeks, AtCoder, CodeStudio, InterviewBit, HackerRank, and HackerEarth for spaced repetition.",
+  "author": "LeetRev Team",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "LeetRev Companion",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": [
+    "cookies",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.leetcode.com/*",
+    "https://*.codeforces.com/*",
+    "https://*.codechef.com/*",
+    "https://*.geeksforgeeks.org/*",
+    "https://*.atcoder.jp/*",
+    "https://*.codingninjas.com/*",
+    "https://*.naukri.com/*",
+    "https://*.interviewbit.com/*",
+    "https://*.hackerrank.com/*",
+    "https://*.hackerearth.com/*",
+    "https://*.vercel.app/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "companion@leetrev.app",
+      "strict_min_version": "109.0"
+    }
+  }
+}
