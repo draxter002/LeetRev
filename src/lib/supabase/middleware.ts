@@ -55,10 +55,13 @@ export async function updateSession(request: NextRequest) {
 
     const path = request.nextUrl.pathname;
     const isAuthPage = path === "/login";
-    // Don't redirect API routes, only page routes
+    // Auth callback and API routes must not be blocked — the OAuth code
+    // exchange happens inside /auth/callback; intercepting it here discards
+    // the code before the route handler can run.
+    const isAuthCallbackRoute = path.startsWith("/auth/");
     const isApiRoute = path.startsWith("/api/");
 
-    if (!user && !isAuthPage && !isApiRoute) {
+    if (!user && !isAuthPage && !isAuthCallbackRoute && !isApiRoute) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
