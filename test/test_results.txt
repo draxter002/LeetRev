@@ -1,0 +1,66 @@
+======================================================================
+LeetRev Test Suite Execution Report
+======================================================================
+Timestamp: 2026-09-21T01:50:23+05:30
+Environment: Node.js v25.2.0 / Windows
+Test Runner: Node.js Built-in Test Runner (`node:test`, `node:assert/strict`) via tsx
+Command: npm test (npx --yes tsx test/scheduling.test.ts)
+
+RESULTS:
+----------------------------------------------------------------------
+▶ Scheduling & Streak Algorithms
+  ▶ todayInTimezone
+    ✔ formats calendar date as YYYY-MM-DD for a specific timezone (2.5823ms)
+    ✔ defaults to UTC when timezone string is empty (0.1745ms)
+  ✔ todayInTimezone (3.3292ms)
+  ▶ addDaysToDate
+    ✔ adds days correctly within the same month (0.807ms)
+    ✔ handles month rollover (0.3499ms)
+    ✔ handles leap year rollover accurately (0.3562ms)
+    ✔ handles year rollover (0.2441ms)
+  ✔ addDaysToDate (2.1304ms)
+  ▶ intervalLabel
+    ✔ generates correct human-readable interval labels (0.2615ms)
+  ✔ intervalLabel (0.4398ms)
+  ▶ daysUntil
+    ✔ calculates exact calendar day differences (0.5795ms)
+  ✔ daysUntil (0.7214ms)
+  ▶ seedRevisionsFromSolved
+    ✔ seeds pending entries corresponding to specified positive intervals (1.2488ms)
+    ✔ deduplicates intervals and filters non-positive numbers (0.3219ms)
+    ✔ returns empty array when no valid intervals are provided (0.1459ms)
+  ✔ seedRevisionsFromSolved (1.902ms)
+  ▶ nextRevisionAfterComplete
+    ✔ preserves cadence by adding interval to scheduledDate, not completion date (0.2138ms)
+  ✔ nextRevisionAfterComplete (0.2973ms)
+  ▶ isOverdue & isDueTodayOrEarlier
+    ✔ evaluates overdue status strictly before today (0.1565ms)
+    ✔ evaluates due today or earlier accurately (0.0949ms)
+  ✔ isOverdue & isDueTodayOrEarlier (0.3359ms)
+  ▶ formatNextRevision
+    ✔ handles null/missing scheduled date (0.1228ms)
+    ✔ handles overdue countdown with singular and plural days (0.1251ms)
+    ✔ handles today countdown (0.0928ms)
+    ✔ handles upcoming countdown with singular and plural days (0.1032ms)
+  ✔ formatNextRevision (0.5469ms)
+  ▶ calculateStreaks
+    ✔ returns zero streaks when there are no active dates (0.2294ms)
+    ✔ increments streak on consecutive active days (0.1542ms)
+    ✔ preserves streak during rest days (days with no due revisions and no activity) (0.1246ms)
+    ✔ breaks streak on missed dates where due revisions were not completed (0.1364ms)
+    ✔ handles multiple streaks and tracks the longest streak accurately (0.1528ms)
+  ✔ calculateStreaks (0.9209ms)
+✔ Scheduling & Streak Algorithms (11.5431ms)
+
+SUMMARY:
+----------------------------------------------------------------------
+Suites:    10
+Tests:     23
+Passed:    23
+Failed:    0
+Cancelled: 0
+Skipped:   0
+Todo:      0
+Duration:  29.14ms
+Status:    ALL TESTS PASSED (100% SUCCESS)
+======================================================================
