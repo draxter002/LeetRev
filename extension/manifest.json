@@ -34,6 +34,8 @@
     "https://*.interviewbit.com/*",
     "https://*.hackerrank.com/*",
     "https://*.hackerearth.com/*",
+    "https://*.approjects.me/*",
+    "https://leetrevision.approjects.me/*",
     "https://*.vercel.app/*",
     "http://localhost:3000/*"
   ],

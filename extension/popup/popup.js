@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Handle Sync All action
   btnSyncAll.addEventListener("click", async () => {
-    const targetUrl = (leetrevUrlInput.value || "https://leetrev.vercel.app").replace(/\/$/, "");
+    const targetUrl = (leetrevUrlInput.value || "https://leetrevision.approjects.me/").replace(/\/$/, "");
     btnSyncAll.disabled = true;
     btnSyncAll.innerText = "⏳ Syncing...";
 
