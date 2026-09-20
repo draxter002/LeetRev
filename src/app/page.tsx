@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { RevisionRow } from "@/components/RevisionRow";
@@ -59,13 +60,25 @@ export default function HomePage() {
         <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-orange-100/60 px-4 py-2.5 shadow-xs">
           <span className="text-2xl drop-shadow-xs">🔥</span>
           <div>
-            <div className="flex items-baseline gap-1">
+            <div className="flex items-baseline gap-1.5">
               <span className="font-display text-2xl font-bold text-amber-950 tabular-nums">
                 {currentStreak}
               </span>
               <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
                 day{currentStreak === 1 ? "" : "s"}
               </span>
+              <Link
+                href="/streak-info"
+                className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-200/80 text-amber-950 transition-colors hover:bg-amber-300 hover:scale-105 active:scale-95"
+                title="Streak rules & info"
+                aria-label="Streak rules and information"
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </Link>
             </div>
             <p className="text-[11px] font-medium text-amber-900/70">Current Streak</p>
           </div>

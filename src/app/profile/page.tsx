@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -311,10 +312,24 @@ export default function ProfilePage() {
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-100/90 text-2xl shadow-xs">
                 🔥
               </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-orange-800/80">
-                  Current Streak
-                </p>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-orange-800/80">
+                    Current Streak
+                  </p>
+                  <Link
+                    href="/streak-info"
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-200/80 text-orange-950 transition-colors hover:bg-orange-300 hover:scale-105 active:scale-95"
+                    title="Streak rules & info"
+                    aria-label="Streak rules and information"
+                  >
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </Link>
+                </div>
                 <p className="font-display text-2xl font-bold text-orange-950 tabular-nums">
                   {streakQuery.data?.currentStreak ?? 0}{" "}
                   <span className="text-sm font-medium text-orange-800">
