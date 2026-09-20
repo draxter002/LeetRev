@@ -49,6 +49,26 @@ export default function StreakInfoPage() {
           </div>
         </div>
 
+        {/* Motivational Consistency Banner */}
+        <div className="rounded-2xl border border-teal/30 bg-gradient-to-br from-teal/10 via-emerald-50/40 to-teal/5 p-5 shadow-xs sm:p-6">
+          <div className="flex items-start gap-3.5">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-teal/20 text-teal-900 text-xl shadow-xs">
+              🌟
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="font-display text-lg font-bold text-teal-950 flex items-center gap-2">
+                Consistency &gt; Quantity
+              </h2>
+              <p className="text-sm leading-relaxed text-teal-900/90">
+                Even if you only complete <strong>1 single revision</strong> from your queue on a busy day, your entire streak is preserved! Showing up every day — no matter how small the step — is what builds true long-term mastery.
+              </p>
+              <p className="text-xs italic text-teal-800/80 font-medium">
+                "Small daily habits compound into extraordinary results. Every step forward, no matter how small, deserves praise!" 🙌
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* The 3 Day Types */}
         <div className="space-y-4">
           <h2 className="font-display text-xl font-bold text-ink">The 3 Day Types</h2>
@@ -194,7 +214,7 @@ export default function StreakInfoPage() {
 
             <details className="group rounded-2xl border border-ink/10 bg-white p-4 transition-all [&_summary::-webkit-details-marker]:hidden">
               <summary className="flex cursor-pointer items-center justify-between font-semibold text-ink">
-                <span>What if I have 3 revisions due and only complete 1?</span>
+                <span>What if I have multiple revisions due and only complete 1?</span>
                 <span className="transition group-open:rotate-180">
                   <svg className="h-4 w-4 text-ink/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M6 9l6 6 6-6" />
@@ -202,7 +222,7 @@ export default function StreakInfoPage() {
                 </span>
               </summary>
               <p className="mt-2 text-xs leading-relaxed text-ink/70">
-                Completing <strong>at least 1 revision or problem</strong> on a day marks that day as an <strong>Active Day</strong> (🔥), protecting your streak for that day!
+                Completing <strong>even just 1 revision or problem</strong> on a busy day marks that day as an <strong>Active Day</strong> (🔥) and preserves your entire streak! Because <strong>Consistency &gt; Quantity</strong> — showing up and taking action, even if small, deserves praise and keeps your momentum alive! 👏✨
               </p>
             </details>
 
