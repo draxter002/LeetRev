@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
@@ -90,10 +91,11 @@ async function processUserReminder(
   admin: any,
   user: { id: string; email?: string | null },
   profile: any,
-  requestOrigin: string
+  requestOrigin: string,
+  isTest: boolean = false
 ) {
   const remindersEnabled = profile?.email_reminders_enabled !== false;
-  if (!remindersEnabled) {
+  if (!remindersEnabled && !isTest) {
     return { status: "skipped", reason: "Email reminders are disabled in profile settings." };
   }
 
@@ -119,7 +121,7 @@ async function processUserReminder(
   const rawRows = (dueData ?? []) as any[];
   const dueRevisions = rawRows.filter((r) => r.problems?.revision_disabled !== true);
 
-  if (dueRevisions.length === 0) {
+  if (dueRevisions.length === 0 && !isTest) {
     return { status: "skipped", reason: "No problems due for revision today.", dueCount: 0 };
   }
 
@@ -164,9 +166,12 @@ async function processUserReminder(
   const revisionLink = `${requestOrigin}/`;
   const subject = "Let the streak number only go up. Here is your reminder for daily revision";
 
-  const problemListText = dueRevisions
-    .map((r) => `  • ${r.problems?.title ?? "Problem"} (${r.problems?.topic ?? "DSA"} · ${r.interval_label})`)
-    .join("\n");
+  const problemListText =
+    dueRevisions.length > 0
+      ? dueRevisions
+          .map((r) => `  • ${r.problems?.title ?? "Problem"} (${r.problems?.topic ?? "DSA"} · ${r.interval_label})`)
+          .join("\n")
+      : "  • No revisions due today! All caught up 🎉";
 
   const emailTextBody = `Hi ${displayName},
 
@@ -216,15 +221,22 @@ async function handleReminders(request: NextRequest) {
     );
 
     // Try user authentication via session cookie (for manual "Send Test Email" calls)
+    const cookieStore = await cookies();
     const serverSupabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() {
-            return request.cookies.getAll();
+            return cookieStore.getAll();
           },
-          setAll() {},
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {}
+          },
         },
       }
     );
@@ -246,7 +258,7 @@ async function handleReminders(request: NextRequest) {
         .eq("id", currentUser.id)
         .maybeSingle();
 
-      const result = await processUserReminder(admin, currentUser, profile, origin);
+      const result = await processUserReminder(admin, currentUser, profile, origin, true);
 
       if (result.status === "skipped") {
         return NextResponse.json({
