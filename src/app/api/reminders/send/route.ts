@@ -121,10 +121,6 @@ async function processUserReminder(
   const rawRows = (dueData ?? []) as any[];
   const dueRevisions = rawRows.filter((r) => r.problems?.revision_disabled !== true);
 
-  if (dueRevisions.length === 0 && !isTest) {
-    return { status: "skipped", reason: "No problems due for revision today.", dueCount: 0 };
-  }
-
   // Calculate current streak
   const { data: revDone } = await admin
     .from("revision_entries")
@@ -164,16 +160,18 @@ async function processUserReminder(
   const currentStreak = streaks.currentStreak;
 
   const revisionLink = `${requestOrigin}/`;
-  const subject = "Let the streak number only go up. Here is your reminder for daily revision";
+  const hasDue = dueRevisions.length > 0;
 
-  const problemListText =
-    dueRevisions.length > 0
-      ? dueRevisions
-          .map((r) => `  • ${r.problems?.title ?? "Problem"} (${r.problems?.topic ?? "DSA"} · ${r.interval_label})`)
-          .join("\n")
-      : "  • No revisions due today! All caught up 🎉";
+  const subject = hasDue
+    ? "Let the streak number only go up. Here is your reminder for daily revision 🔥"
+    : "Relax, it's a rest day! ☕ — LeetRevision";
 
-  const emailTextBody = `Hi ${displayName},
+  const problemListText = dueRevisions
+    .map((r) => `  • ${r.problems?.title ?? "Problem"} (${r.problems?.topic ?? "DSA"} · ${r.interval_label})`)
+    .join("\n");
+
+  const emailTextBody = hasDue
+    ? `Hi ${displayName},
 
 Let the streak number only go up 🔥 (Current streak: ${currentStreak} day${currentStreak === 1 ? "" : "s"}).
 
@@ -186,6 +184,19 @@ Click the link below to view today's revision queue and complete them:
 ${revisionLink}
 
 Keep up the great work!
+- LeetRevision Team`
+    : `Hi ${displayName},
+
+Relax, it's a rest day! ☕
+
+You have 0 revisions due today in your queue (${today}). Your spaced repetition schedule gives you a well-deserved break today to recharge.
+
+Current streak: ${currentStreak} day${currentStreak === 1 ? "" : "s"} 🔥 (rest days preserve your streak!).
+
+View your dashboard anytime:
+${revisionLink}
+
+Enjoy your day!
 - LeetRevision Team`;
 
   console.log("================== REMINDER EMAIL DISPATCH ==================");
