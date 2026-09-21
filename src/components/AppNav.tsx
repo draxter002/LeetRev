@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "./ThemeToggle";
 
 const links = [
   { href: "/", label: "Home", icon: HomeIcon },
@@ -68,21 +69,35 @@ export function AppNav() {
           <Link href="/" className="font-display text-xl tracking-tight text-ink">
             Leet<span className="text-teal">Revision</span>
           </Link>
-          <nav className="flex items-center gap-1">
-            {links.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isActive(href)
-                    ? "bg-teal/10 text-teal"
-                    : "text-ink/70 hover:bg-ink/5 hover:text-ink"
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
+          <div className="flex items-center gap-3">
+            <nav className="flex items-center gap-1">
+              {links.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    isActive(href)
+                      ? "bg-teal/10 text-teal"
+                      : "text-ink/70 hover:bg-ink/5 hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+            <div className="h-4 w-px bg-ink/15" />
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile top header bar with ThemeToggle */}
+      <header className="sticky top-0 z-40 border-b border-ink/10 bg-paper/90 backdrop-blur-md md:hidden">
+        <div className="mx-auto flex h-13 items-center justify-between px-4">
+          <Link href="/" className="font-display text-lg tracking-tight text-ink">
+            Leet<span className="text-teal">Revision</span>
+          </Link>
+          <ThemeToggle />
         </div>
       </header>
 

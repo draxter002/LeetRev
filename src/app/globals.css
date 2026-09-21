@@ -12,6 +12,19 @@
   --priority-high: #e11d48;
 }
 
+html.dark {
+  --paper: #0f172a;
+  --ink: #f8fafc;
+  --teal: #14b8a6;
+  --teal-dark: #0d9488;
+  --missed: #fb923c;
+  --missed-bg: #2d120d;
+  --priority-low: #4ade80;
+  --priority-med: #facc15;
+  --priority-high: #f87171;
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-paper: var(--paper);
   --color-ink: var(--ink);
@@ -41,6 +54,44 @@ body {
     );
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html.dark body {
+  background-color: #0f172a;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(20, 184, 166, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(248, 250, 252, 0.04), transparent),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 27px,
+      rgba(248, 250, 252, 0.03) 27px,
+      rgba(248, 250, 252, 0.03) 28px
+    );
+  color: #f8fafc;
+}
+
+/* Dark mode card surfaces */
+html.dark .bg-white,
+html.dark .bg-white\/70,
+html.dark .bg-white\/80,
+html.dark .bg-white\/90,
+html.dark .bg-white\/95 {
+  background-color: #1e293b !important;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: rgba(248, 250, 252, 0.18) !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: rgba(248, 250, 252, 0.45) !important;
 }
 
 .font-display {
