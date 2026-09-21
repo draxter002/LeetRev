@@ -99,6 +99,7 @@ export function calculateStreaks(
 
   let currentStreak = 0;
   let longestStreak = 0;
+  let consecutiveInactive = 0;
 
   let currDate = startDate;
 
@@ -107,14 +108,20 @@ export function calculateStreaks(
     if (activeSet.has(currDate)) {
       // Activity logged on this day -> increment streak
       currentStreak += 1;
+      consecutiveInactive = 0;
       if (currentStreak > longestStreak) {
         longestStreak = currentStreak;
       }
     } else if (missedSet.has(currDate)) {
       // Missed due revision on this day without any activity -> break streak
       currentStreak = 0;
+      consecutiveInactive = 0;
     } else {
-      // Rest day (no revisions due, no activity) -> streak is preserved
+      // Rest day (no revisions due, no activity) -> 1 rest day is preserved, but 2+ consecutive inactive days breaks streak
+      consecutiveInactive += 1;
+      if (consecutiveInactive > 1) {
+        currentStreak = 0;
+      }
     }
 
     currDate = addDaysToDate(currDate, 1);

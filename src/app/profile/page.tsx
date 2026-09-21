@@ -80,9 +80,44 @@ export default function ProfilePage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  // Email reminders state (ticked by default)
+  // Email reminders & Web Notifications state
   const [emailRemindersEnabled, setEmailRemindersEnabled] = useState(true);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [webNotificationPermission, setWebNotificationPermission] = useState<string>("default");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setWebNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  const handleTestWebNotification = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      toast("Web Notifications are not supported by your browser.", "error");
+      return;
+    }
+
+    let permission = Notification.permission;
+    if (permission === "default") {
+      permission = await Notification.requestPermission();
+      setWebNotificationPermission(permission);
+    }
+
+    if (permission === "granted") {
+      try {
+        new Notification("🔥 LeetRevision Daily Reminder", {
+          body: "This is a test notification! Web notifications are working correctly for your daily revision reminders.",
+          icon: "/favicon.ico",
+          tag: "leetrev-test-reminder",
+        });
+        toast("✨ Test web notification sent! Check your desktop notifications.", "success");
+      } catch (err) {
+        toast("Failed to trigger web notification: " + (err instanceof Error ? err.message : String(err)), "error");
+      }
+    } else if (permission === "denied") {
+      toast("⚠️ Notification permission was denied. Please enable notifications in your browser site settings.", "error");
+    }
+  };
 
   // Multi-platform usernames/handles state
   const [codeforcesHandle, setCodeforcesHandle] = useState("");
@@ -469,7 +504,49 @@ export default function ProfilePage() {
                 </p>
               </div>
 
-              {/* Email Reminders Checkbox (Ticked by Default) */}
+              {/* Web Notifications Card (Desktop Browser Alerts) */}
+              <div className="rounded-xl border border-teal/20 bg-teal/[0.03] p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🔔</span>
+                      <span className="text-sm font-semibold text-ink">
+                        Browser Web Notifications
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          webNotificationPermission === "granted"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : webNotificationPermission === "denied"
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {webNotificationPermission === "granted"
+                          ? "Enabled"
+                          : webNotificationPermission === "denied"
+                          ? "Blocked"
+                          : "Not Configured"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-ink/60">
+                      Get instant desktop notifications on your device when daily revisions are due. No server or email setup required.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestWebNotification}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal/30 bg-white px-3 py-1.5 text-xs font-semibold text-teal-900 hover:bg-teal/5 shadow-xs transition-colors"
+                  >
+                    🔔 Send Test Web Notification
+                  </button>
+                </div>
+              </div>
+
+              {/* Email Reminders Checkbox */}
               <div className="rounded-xl border border-ink/10 bg-ink/[0.02] p-3.5 space-y-2">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -483,7 +560,7 @@ export default function ProfilePage() {
                       Send reminder for revision over emails
                     </span>
                     <p className="mt-0.5 text-xs text-ink/55">
-                      Receive daily email reminders with a link to today's revision queue. (No email is sent if there are no problems due for revision).
+                      Receive daily email reminders with a link to today's revision queue. (Requires SMTP backend).
                     </p>
                   </div>
                 </label>
@@ -501,7 +578,10 @@ export default function ProfilePage() {
                           if (j.sent) {
                             toast(j.message || "Reminder email sent!", "success");
                           } else {
-                            toast(j.message || j.reason || "No email sent.", "info");
+                            toast(
+                              j.message || j.reason || "Email simulated mode (No SMTP configured). Use Web Notifications above for instant desktop alerts!",
+                              "info"
+                            );
                           }
                         } catch (err) {
                           toast(err instanceof Error ? err.message : "Failed to send test email", "error");

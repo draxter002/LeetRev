@@ -34,6 +34,22 @@ export default function HomePage() {
     enabled: !!profileQuery.data,
   });
 
+  // Fire Web Notification if revisions are due and permission is granted
+  useEffect(() => {
+    if (!dueQuery.data || dueQuery.data.length === 0) return;
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (sessionStorage.getItem("leetrev_notified_due_today") === "1") return;
+
+    sessionStorage.setItem("leetrev_notified_due_today", "1");
+    const dueCount = dueQuery.data.length;
+    new Notification("🔥 LeetRevision Daily Reminder", {
+      body: `You have ${dueCount} problem${dueCount === 1 ? "" : "s"} due for revision today! Keep your streak alive.`,
+      icon: "/favicon.ico",
+      tag: "leetrev-due-reminder",
+    });
+  }, [dueQuery.data]);
+
   // ── Auto-sync on first website open (once per browser session) ──
   const autoSyncFiredRef = useRef(false);
   useEffect(() => {

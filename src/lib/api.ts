@@ -53,7 +53,7 @@ export async function fetchUserStreaks(timezone: string): Promise<StreakResult> 
 
     const { data: probData, error: probErr } = await supabase
       .from("problems")
-      .select("date_solved, date_added");
+      .select("date_solved");
 
     if (probErr) console.warn("[fetchUserStreaks] probData warning:", probErr.message);
 
@@ -66,7 +66,6 @@ export async function fetchUserStreaks(timezone: string): Promise<StreakResult> 
     if (probData) {
       for (const p of probData) {
         if (p.date_solved) activeDates.push(p.date_solved);
-        if (p.date_added) activeDates.push(p.date_added);
       }
     }
 

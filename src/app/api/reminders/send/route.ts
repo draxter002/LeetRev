@@ -140,7 +140,7 @@ async function processUserReminder(
 
   const { data: probData } = await admin
     .from("problems")
-    .select("date_solved, date_added")
+    .select("date_solved")
     .eq("user_id", user.id);
 
   const activeDates: string[] = [];
@@ -150,7 +150,6 @@ async function processUserReminder(
   if (probData) {
     for (const p of probData) {
       if (p.date_solved) activeDates.push(p.date_solved);
-      if (p.date_added) activeDates.push(p.date_added);
     }
   }
 
