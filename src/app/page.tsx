@@ -1,13 +1,19 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { RevisionRow } from "@/components/RevisionRow";
-import { fetchDueRevisions, fetchProfile, fetchUserStreaks } from "@/lib/api";
+import { fetchDueRevisions, fetchProfile, fetchUserStreaks, syncSubmissions } from "@/lib/api";
 import { todayInTimezone } from "@/lib/scheduling";
+import { useToast } from "@/components/Toast";
 
 export default function HomePage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [syncing, setSyncing] = useState(false);
+
   const profileQuery = useQuery({
     queryKey: ["profile"],
     queryFn: fetchProfile,
@@ -28,6 +34,44 @@ export default function HomePage() {
     enabled: !!profileQuery.data,
   });
 
+  // ── Auto-sync on first website open (once per browser session) ──
+  const autoSyncFiredRef = useRef(false);
+  useEffect(() => {
+    // Only run after profile is loaded and only once per session
+    if (!profileQuery.data) return;
+    if (autoSyncFiredRef.current) return;
+    if (sessionStorage.getItem("leetrev_synced_this_session") === "1") {
+      autoSyncFiredRef.current = true;
+      return;
+    }
+
+    autoSyncFiredRef.current = true;
+    sessionStorage.setItem("leetrev_synced_this_session", "1");
+
+    // Fire silently in background — no loading spinner, no error toast on failure
+    syncSubmissions()
+      .then((res) => {
+        if (res.addedCount > 0) {
+          toast(
+            `✨ Found ${res.addedCount} new problem${
+              res.addedCount === 1 ? "" : "s"
+            } across ${
+              res.platformsChecked?.join(", ") || "platforms"
+            }! Added to your queue.`,
+            "success"
+          );
+          queryClient.invalidateQueries({ queryKey: ["due-revisions"] });
+          queryClient.invalidateQueries({ queryKey: ["problems"] });
+          queryClient.invalidateQueries({ queryKey: ["pending-revisions"] });
+          queryClient.invalidateQueries({ queryKey: ["user-streaks"] });
+          queryClient.invalidateQueries({ queryKey: ["profile"] });
+        }
+      })
+      .catch(() => {
+        // Silently ignore auto-sync errors so startup UX is unaffected
+      });
+  }, [profileQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const due = dueQuery.data ?? [];
   const totalCount = due.length;
   const completedCount = due.filter((e) => e.status === "done").length;
@@ -38,6 +82,36 @@ export default function HomePage() {
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const currentStreak = streakQuery.data?.currentStreak ?? 0;
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await syncSubmissions();
+      const added = res.addedCount ?? 0;
+      const patched = res.patchedCount ?? 0;
+
+      if (added > 0 || patched > 0) {
+        const parts: string[] = [];
+        if (added > 0) parts.push(`${added} new problem${added === 1 ? "" : "s"}`);
+        if (patched > 0) parts.push(`${patched} cross-platform link${patched === 1 ? "" : "s"} merged`);
+        toast(
+          `✨ ${parts.join(" · ")} across ${res.platformsChecked?.join(", ") || "platforms"}!`,
+          "success"
+        );
+      } else {
+        toast(res.message || "All platforms are up to date.", "info");
+      }
+      queryClient.invalidateQueries({ queryKey: ["due-revisions"] });
+      queryClient.invalidateQueries({ queryKey: ["problems"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-revisions"] });
+      queryClient.invalidateQueries({ queryKey: ["user-streaks"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    } catch (e: any) {
+      toast(e?.message || "Failed to sync submissions", "error");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <AppShell>
@@ -56,8 +130,20 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Current Streak Flame Badge */}
-        <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-orange-100/60 px-4 py-2.5 shadow-xs">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded-2xl border border-ink/15 bg-white/90 px-3.5 py-2 text-xs font-semibold text-ink shadow-xs hover:bg-ink/5 disabled:opacity-50 transition"
+            title="Look for new submissions across all platforms"
+          >
+            <span className={syncing ? "animate-spin inline-block" : ""}>🔄</span>
+            <span>{syncing ? "Syncing…" : "Sync Platforms"}</span>
+          </button>
+
+          {/* Current Streak Flame Badge */}
+          <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-orange-100/60 px-4 py-2.5 shadow-xs">
           <span className="text-2xl drop-shadow-xs">🔥</span>
           <div>
             <div className="flex items-baseline gap-1.5">
@@ -84,6 +170,7 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+    </div>
 
       {totalCount > 0 && (
         <div className="mb-6 space-y-2 rounded-xl border border-ink/10 bg-white/70 p-3.5 shadow-xs">

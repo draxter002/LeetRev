@@ -77,7 +77,14 @@ export async function GET(request: NextRequest) {
       .eq("user_id", user.id)
       .is("priority", null);
 
-    return NextResponse.json({ profile });
+    // Attach platform_handles from user_metadata
+    const platform_handles = user.user_metadata?.platform_handles || {};
+    const fullProfile = {
+      ...profile,
+      platform_handles,
+    };
+
+    return NextResponse.json({ profile: fullProfile });
   } catch (err) {
     console.error("[api/profile GET]", err);
     return NextResponse.json(
@@ -116,6 +123,7 @@ export async function PATCH(request: NextRequest) {
       default_revision_intervals,
       default_priority,
       email_reminders_enabled,
+      platform_handles,
     } = body;
 
     const admin = createSupabaseClient(
@@ -188,7 +196,24 @@ export async function PATCH(request: NextRequest) {
         .eq("priority", oldDefaultPriority);
     }
 
-    return NextResponse.json({ profile: updated });
+    // If platform_handles was provided, persist to user_metadata
+    let currentHandles = user.user_metadata?.platform_handles || {};
+    if (platform_handles !== undefined && typeof platform_handles === "object") {
+      currentHandles = { ...currentHandles, ...platform_handles };
+      await admin.auth.admin.updateUserById(user.id, {
+        user_metadata: {
+          ...user.user_metadata,
+          platform_handles: currentHandles,
+        },
+      });
+    }
+
+    return NextResponse.json({
+      profile: {
+        ...updated,
+        platform_handles: currentHandles,
+      },
+    });
   } catch (err) {
     console.error("[api/profile PATCH] Fatal error:", err);
     return NextResponse.json(

@@ -197,3 +197,36 @@ export function ProblemLinkButton({
     </a>
   );
 }
+
+/**
+ * Renders one link badge per platform in `platform_links`.
+ * Falls back to a single ProblemLinkButton from `primaryLink` if platform_links is empty/null.
+ */
+export function PlatformLinksRow({
+  platformLinks,
+  primaryLink,
+  showLabel = false,
+  className = "",
+}: {
+  platformLinks?: Record<string, string> | null;
+  primaryLink?: string | null;
+  showLabel?: boolean;
+  className?: string;
+}) {
+  const entries = platformLinks && Object.keys(platformLinks).length > 0
+    ? Object.entries(platformLinks)
+    : null;
+
+  if (entries) {
+    return (
+      <span className={`inline-flex flex-wrap items-center gap-1 ${className}`}>
+        {entries.map(([, url]) => (
+          <ProblemLinkButton key={url} url={url} showLabel={showLabel} />
+        ))}
+      </span>
+    );
+  }
+
+  // Fallback to canonical single link
+  return <ProblemLinkButton url={primaryLink} showLabel={showLabel} className={className} />;
+}

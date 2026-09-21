@@ -14,6 +14,7 @@ import {
   fetchCompletedRevisionsForProblems,
   fetchProblems,
   fetchProfile,
+  syncSubmissions,
 } from "@/lib/api";
 
 export default function SolvedPage() {
@@ -27,7 +28,6 @@ export default function SolvedPage() {
     queryFn: fetchProfile,
   });
   const timezone = profileQuery.data?.timezone ?? "UTC";
-  const hasLeetCode = !!(profileQuery.data?.leetcode_username || profileQuery.data?.leetcode_session);
 
   const problemsQuery = useQuery({
     queryKey: ["problems"],
@@ -58,29 +58,20 @@ export default function SolvedPage() {
   async function handleRefresh() {
     setRefreshing(true);
     try {
-      const res = await fetch(`/api/leetcode/import`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: profileQuery.data?.leetcode_username || undefined,
-          sessionCookie: profileQuery.data?.leetcode_session || undefined,
-        }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.error || "Refresh failed");
-      const added = j.added ?? 0;
-      const total = j.totalFound ?? added;
+      const j = await syncSubmissions();
+      const added = j.addedCount ?? 0;
+      const patched = j.patchedCount ?? 0;
 
-      if (total > 0) {
+      if (added > 0 || patched > 0) {
+        const parts: string[] = [];
+        if (added > 0) parts.push(`${added} new problem${added === 1 ? "" : "s"} added`);
+        if (patched > 0) parts.push(`${patched} platform link${patched === 1 ? "" : "s"} merged into existing problems`);
         toast(
-          `Success! Synced ${total} solved problems from your LeetCode account (${added} new added).`,
+          `✨ ${parts.join(" · ")} (${j.platformsChecked?.join(", ") || "platforms"})`,
           "success"
         );
       } else {
-        toast(
-          added > 0 ? `Synced — ${added} new problem${added === 1 ? "" : "s"} added` : "Already up to date",
-          "success"
-        );
+        toast(j.message || "All platforms are already up to date.", "info");
       }
 
       queryClient.invalidateQueries({ queryKey: ["problems"] });
@@ -89,7 +80,7 @@ export default function SolvedPage() {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       queryClient.invalidateQueries({ queryKey: ["user-streaks"] });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Refresh failed", "error");
+      toast(e instanceof Error ? e.message : "Sync failed", "error");
     } finally {
       setRefreshing(false);
     }
@@ -109,19 +100,17 @@ export default function SolvedPage() {
           >
             📋 Bulk Paste
           </button>
-          {hasLeetCode && (
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-ink/15 px-3 py-2 text-sm font-semibold text-ink hover:bg-ink/5 disabled:opacity-50 sm:inline-flex"
-            >
-              {refreshing && (
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink/20 border-t-teal" />
-              )}
-              {refreshing ? "Syncing…" : "Refresh LeetCode"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink hover:bg-ink/5 disabled:opacity-50 sm:inline-flex"
+          >
+            {refreshing && (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink/20 border-t-teal" />
+            )}
+            {refreshing ? "Syncing…" : "🔄 Sync Platforms"}
+          </button>
           <Link
             href="/solved/new"
             className="hidden shrink-0 items-center gap-1 rounded-lg bg-teal px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-dark sm:inline-flex"

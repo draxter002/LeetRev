@@ -85,7 +85,7 @@ export async function fetchUserStreaks(timezone: string): Promise<StreakResult> 
 }
 
 export async function updateProfile(
-  updates: Partial<Pick<Profile, "display_name" | "timezone" | "leetcode_username" | "default_revision_intervals" | "default_priority" | "email_reminders_enabled">>
+  updates: Partial<Pick<Profile, "display_name" | "timezone" | "leetcode_username" | "default_revision_intervals" | "default_priority" | "email_reminders_enabled" | "platform_handles">>
 ): Promise<Profile> {
   const res = await fetch("/api/profile", {
     method: "PATCH",
@@ -95,6 +95,23 @@ export async function updateProfile(
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to save profile settings");
   return data.profile as Profile;
+}
+
+export async function syncSubmissions(): Promise<{
+  ok: boolean;
+  addedCount: number;
+  patchedCount: number;
+  totalFound: number;
+  platformsChecked: string[];
+  message: string;
+}> {
+  const res = await fetch("/api/sync/submissions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to sync submissions");
+  return data;
 }
 
 export async function fetchProblems(): Promise<Problem[]> {
@@ -161,12 +178,12 @@ export async function fetchDueRevisions(
   const [dueRes, doneRes] = await Promise.all([
     supabase
       .from("revision_entries")
-      .select("*, problems (id, title, topic, priority, problem_link, revision_disabled)")
+      .select("*, problems (id, title, topic, priority, problem_link, platform_links, revision_disabled)")
       .in("status", ["pending", "missed"])
       .lte("scheduled_date", today),
     supabase
       .from("revision_entries")
-      .select("*, problems (id, title, topic, priority, problem_link, revision_disabled)")
+      .select("*, problems (id, title, topic, priority, problem_link, platform_links, revision_disabled)")
       .eq("status", "done")
       .eq("completed_date", today),
   ]);

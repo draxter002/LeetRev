@@ -5,7 +5,7 @@ import { completeRevision, uncompleteRevision } from "@/lib/api";
 import { isOverdue, StreakResult, todayInTimezone } from "@/lib/scheduling";
 import type { RevisionEntryWithProblem } from "@/lib/types";
 import { PriorityDot } from "./PriorityBadge";
-import { ProblemLinkButton } from "./PlatformIcon";
+import { PlatformLinksRow } from "./PlatformIcon";
 
 export function RevisionRow({
   entry,
@@ -159,9 +159,11 @@ export function RevisionRow({
               <p className={`truncate font-medium ${isDone ? "line-through text-ink/45" : "text-ink"}`}>
                 {problem.title}
               </p>
-              {problem.problem_link && (
-                <ProblemLinkButton url={problem.problem_link} showLabel={false} />
-              )}
+              <PlatformLinksRow
+                platformLinks={problem.platform_links}
+                primaryLink={problem.problem_link}
+                showLabel={false}
+              />
             </div>
             <p className="mt-0.5 text-sm text-ink/55">
               {problem.topic}

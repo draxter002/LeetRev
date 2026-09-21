@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type ToastVariant = "success" | "error" | "info";
 
@@ -9,6 +9,14 @@ export type ToastMessage = {
   message: string;
   variant: ToastVariant;
 };
+
+type ToastContextType = {
+  toast: (message: string, variant?: ToastVariant) => void;
+  toasts: ToastMessage[];
+  dismiss: (id: number) => void;
+};
+
+const ToastContext = createContext<ToastContextType | null>(null);
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
   success: "bg-teal text-white",
@@ -35,11 +43,11 @@ function ToastPill({
   useEffect(() => {
     // Animate in
     const show = requestAnimationFrame(() => setVisible(true));
-    // Auto-dismiss after 3.5 s
+    // Auto-dismiss after 4.5 s
     const timer = setTimeout(() => {
       setVisible(false);
       setTimeout(() => onDismiss(toast.id), 300);
-    }, 3500);
+    }, 4500);
     return () => {
       cancelAnimationFrame(show);
       clearTimeout(timer);
@@ -87,13 +95,12 @@ export function ToastContainer({ toasts, onDismiss }: {
   );
 }
 
-/** Hook that manages a toast queue */
-export function useToast() {
+/** Global provider that mounts the container and gives access to toast() everywhere */
+export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  let nextId = 0;
 
   const toast = (message: string, variant: ToastVariant = "info") => {
-    const id = ++nextId + Date.now();
+    const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, message, variant }]);
   };
 
@@ -101,5 +108,31 @@ export function useToast() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  return { toasts, toast, dismiss };
+  return (
+    <ToastContext.Provider value={{ toast, toasts, dismiss }}>
+      {children}
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
+    </ToastContext.Provider>
+  );
+}
+
+/** Hook that manages or accesses the toast queue */
+export function useToast() {
+  const ctx = useContext(ToastContext);
+  const [localToasts, setLocalToasts] = useState<ToastMessage[]>([]);
+
+  if (ctx) {
+    return ctx;
+  }
+
+  const toast = (message: string, variant: ToastVariant = "info") => {
+    const id = Date.now() + Math.random();
+    setLocalToasts((prev) => [...prev, { id, message, variant }]);
+  };
+
+  const dismiss = (id: number) => {
+    setLocalToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  return { toasts: localToasts, toast, dismiss };
 }

@@ -27,6 +27,13 @@ export type Profile = {
   // default intervals to use when seeding/importing problems
   default_revision_intervals?: number[];
   default_priority?: Priority;
+  platform_handles?: {
+    codeforces?: string;
+    atcoder?: string;
+    codechef?: string;
+    geeksforgeeks?: string;
+    [key: string]: string | undefined;
+  };
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +45,8 @@ export type Problem = {
   topic: Topic | string;
   priority: Priority | null;
   problem_link: string | null;
+  /** Map of platform key → URL, e.g. { leetcode: "https://...", codeforces: "https://..." } */
+  platform_links?: Record<string, string> | null;
   date_added: string;
   date_solved: string | null;
   revision_intervals: number[];
@@ -62,7 +71,7 @@ export type RevisionEntry = {
 };
 
 export type RevisionEntryWithProblem = RevisionEntry & {
-  problems: Pick<Problem, "id" | "title" | "topic" | "priority" | "problem_link">;
+  problems: Pick<Problem, "id" | "title" | "topic" | "priority" | "problem_link" | "platform_links">;
 };
 
 export type ProblemFormValues = {

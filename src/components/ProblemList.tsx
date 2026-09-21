@@ -8,7 +8,7 @@ import type { RevisionEntry, RevisionEntryWithProblem } from "@/lib/types";
 import { PriorityBadge, PriorityDot } from "./PriorityBadge";
 import { SolutionDisplay } from "./SolutionDisplay";
 import { isOverdue, StreakResult, todayInTimezone } from "@/lib/scheduling";
-import { ProblemLinkButton } from "./PlatformIcon";
+import { PlatformLinksRow } from "./PlatformIcon";
 
 function RevisionHistoryItem({
   item,
@@ -224,9 +224,13 @@ export function ProblemList({
                         🔁 {timesRevised === 0 ? "Revised 0 times" : `Revised ${timesRevised} time${timesRevised === 1 ? "" : "s"}`}
                       </span>
                     )}
-                    {problem.problem_link && (
-                      <ProblemLinkButton url={problem.problem_link} showLabel={true} />
-                    )}
+                    {(problem.platform_links && Object.keys(problem.platform_links).length > 0) || problem.problem_link ? (
+                      <PlatformLinksRow
+                        platformLinks={problem.platform_links}
+                        primaryLink={problem.problem_link}
+                        showLabel={true}
+                      />
+                    ) : null}
                     <Link
                       href={`/solved/${problem.id}/edit`}
                       className="ml-auto text-xs font-semibold text-ink/50 hover:text-teal"
