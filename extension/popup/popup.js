@@ -101,7 +101,9 @@ async function detectCookies() {
 }
 
 function renderPlatforms(grid, countEl) {
-  grid.innerHTML = "";
+  while (grid.firstChild) {
+    grid.removeChild(grid.firstChild);
+  }
   let activeCount = 0;
 
   PLATFORMS.forEach((p) => {
@@ -110,17 +112,27 @@ function renderPlatforms(grid, countEl) {
 
     const card = document.createElement("div");
     card.className = "platform-card";
-    card.innerHTML = `
-      <div class="platform-info">
-        <span>${p.icon}</span>
-        <span>${p.name}</span>
-      </div>
-      <span class="status-pill ${statusData.connected ? 'status-connected' : 'status-disconnected'}">
-        ${statusData.connected ? '● Active' : '○ Not Detected'}
-      </span>
-    `;
+
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "platform-info";
+
+    const iconSpan = document.createElement("span");
+    iconSpan.textContent = p.icon;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = p.name;
+
+    infoDiv.appendChild(iconSpan);
+    infoDiv.appendChild(nameSpan);
+
+    const statusSpan = document.createElement("span");
+    statusSpan.className = `status-pill ${statusData.connected ? 'status-connected' : 'status-disconnected'}`;
+    statusSpan.textContent = statusData.connected ? '● Active' : '○ Not Detected';
+
+    card.appendChild(infoDiv);
+    card.appendChild(statusSpan);
     grid.appendChild(card);
   });
 
-  countEl.innerText = `${activeCount} Active`;
+  countEl.textContent = `${activeCount} Active`;
 }
